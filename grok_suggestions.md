@@ -33,7 +33,7 @@ Your approach is solid and lightweight, but it can be refined for simplicity, ma
    - Don’t keep the repos long-term—disk space matters more than re-cloning (GitHub clones are fast).
 
 4. **Homepage Generation:**
-   - Write a simple script (bash or Node.js) that scans `/games/` for subdirectories and generates `index.html` dynamically on container start.
+   - Write a simple script (bash or Node.js) that scans `/games/` for subdirectories and generates `index.html` dynamically on container start. (for some htmx features we'll have a games.json so maybe we generate this games.json with a bash script here)
    - Serve this `index.html` from `/usr/share/nginx/html/` (default Nginx root).
 
 5. **Container Size and Cleanup:**
