@@ -1,0 +1,5 @@
+- Bash vs Go
+- games.json (game name, github link)
+- (using zig, since all games will be zig - WASM freestanding targets (or should we use emscripten?)) pull each git repo to a /tmp directory, build (which should default to a /dist directory), copy the game's tmp/dist to a location for the server (lightweight nginx image) probably in a /wasm-games directory, create hash for the directory NOT in /tmp, clean up /tmp
+- check hash of each repo x often to see if we need to rebuild
+- games.mydomain.com
