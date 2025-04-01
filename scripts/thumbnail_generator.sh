@@ -137,26 +137,83 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
         const fileUrl = \`file://\${path.resolve(gamePath)}\`;
         debugLog(\`Attempting to load \${fileUrl}\`);
         
+        // Set a safety timeout to prevent hanging
+        const safetyTimeout = setTimeout(() => {
+            debugLog('ERROR: Safety timeout triggered after 30 seconds');
+            // Continue execution even if page.goto hangs
+            throw new Error('Navigation timeout - safety mechanism');
+        }, 30000);
+        
         try {
-            await page.goto(fileUrl, { 
-                waitUntil: 'networkidle',
-                timeout: PLAYWRIGHT_TIMEOUT
-            });
+            debugLog('Starting page navigation...');
+            await Promise.race([
+                page.goto(fileUrl, { 
+                    waitUntil: 'networkidle',
+                    timeout: PLAYWRIGHT_TIMEOUT / 2 // Use shorter timeout for navigation
+                }),
+                // Secondary timeout as additional safety
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Navigation timeout')), 
+                    PLAYWRIGHT_TIMEOUT / 2)
+                )
+            ]);
+            debugLog('Page navigation completed');
+            
+            // Clear the safety timeout since navigation succeeded
+            clearTimeout(safetyTimeout);
+            
             debugLog('Page loaded successfully');
             
-            // Check if WebGL is available and log info
-            const webglInfo = await page.evaluate(() => window.extractWebGLInfo());
-            debugLog('WebGL Info:', JSON.stringify(webglInfo, null, 2));
-            
-            if (webglInfo.supported) {
-                debugLog('WebGL is supported! Using hardware/software rendering');
-            } else {
-                debugLog('WebGL not supported. Game may not render correctly:', webglInfo.reason);
+            // Check if WebGL is available and log info with a timeout
+            debugLog('Extracting WebGL info...');
+            try {
+                // Set a timeout for WebGL extraction
+                const webglTimeout = setTimeout(() => {
+                    debugLog('ERROR: WebGL info extraction timeout after 10 seconds');
+                    throw new Error('WebGL extraction timeout');
+                }, 10000);
+                
+                // Use Promise.race to ensure the evaluation doesn't hang
+                const webglInfo = await Promise.race([
+                    page.evaluate(() => window.extractWebGLInfo()),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('WebGL info extraction timed out')), 
+                        8000)
+                    )
+                ]);
+                
+                clearTimeout(webglTimeout);
+                debugLog('WebGL Info:', JSON.stringify(webglInfo, null, 2));
+                
+                if (webglInfo.supported) {
+                    debugLog('WebGL is supported! Using hardware/software rendering');
+                } else {
+                    debugLog('WebGL not supported. Game may not render correctly:', webglInfo.reason);
+                }
+            } catch (webglError) {
+                debugLog('ERROR: WebGL info extraction failed:', webglError);
+                debugLog('Continuing despite WebGL extraction failure');
             }
             
         } catch (loadError) {
+            // Clear the safety timeout to prevent unexpected throws
+            clearTimeout(safetyTimeout);
+            
             debugLog('ERROR: Page load failed', loadError);
             debugLog('Attempting to continue despite load error');
+            
+            // Try a different approach with simpler loading options
+            debugLog('Attempting simplified page load...');
+            try {
+                await page.goto(fileUrl, { 
+                    waitUntil: 'domcontentloaded', // Less strict waiting condition
+                    timeout: 10000 // Short timeout
+                });
+                debugLog('Simplified page load completed');
+            } catch (retryError) {
+                debugLog('Simplified load also failed:', retryError);
+                // Continue anyway, might still be able to take a screenshot
+            }
         }
         
         // Log DOM content
@@ -195,32 +252,47 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
         // Take screenshot
         const thumbPath = path.join(outputDir, \`thumbnail.png\`);
         debugLog(\`Attempting to capture screenshot to \${thumbPath}\`);
-        await page.screenshot({ 
-            path: thumbPath,
-            fullPage: false,
-            omitBackground: false
-        });
-        debugLog('Screenshot captured successfully');
-
-        // Verify screenshot exists and has content
-        if (fs.existsSync(thumbPath)) {
-            const stats = fs.statSync(thumbPath);
-            debugLog(\`Screenshot file size: \${stats.size} bytes\`);
+        
+        try {
+            // Set a timeout for the screenshot process
+            const screenshotTimeout = setTimeout(() => {
+                debugLog('ERROR: Screenshot timeout triggered after 15 seconds');
+                throw new Error('Screenshot timeout');
+            }, 15000);
             
-            if (stats.size < 100) {
-                debugLog('WARNING: Screenshot file is very small, might be empty');
+            await page.screenshot({ 
+                path: thumbPath,
+                fullPage: false,
+                omitBackground: false,
+                timeout: 10000
+            });
+            
+            clearTimeout(screenshotTimeout);
+            debugLog('Screenshot captured successfully');
+            
+            // Verify screenshot exists and has content
+            if (fs.existsSync(thumbPath)) {
+                const stats = fs.statSync(thumbPath);
+                debugLog(\`Screenshot file size: \${stats.size} bytes\`);
+                
+                if (stats.size < 100) {
+                    debugLog('WARNING: Screenshot file is very small, might be empty');
+                }
+            } else {
+                throw new Error('Screenshot file was not created');
             }
-        } else {
-            throw new Error('Screenshot file was not created');
-        }
 
-        // Resize to thumbnail
-        debugLog('Resizing screenshot to thumbnail size');
-        await sharp(thumbPath)
-            .resize(width, height)
-            .toFile(path.join(outputDir, \`thumbnail-\${width}x\${height}.png\`));
-            
-        console.log(\`Generated thumbnail for \${gameDir}\`);
+            // Resize to thumbnail
+            debugLog('Resizing screenshot to thumbnail size');
+            await sharp(thumbPath)
+                .resize(width, height)
+                .toFile(path.join(outputDir, \`thumbnail-\${width}x\${height}.png\`));
+                
+            console.log(\`Generated thumbnail for \${gameDir}\`);
+        } catch (screenshotError) {
+            debugLog('ERROR: Screenshot capture failed:', screenshotError);
+            // Continue to finally block for cleanup
+        }
     } catch (error) {
         console.error(\`Error generating thumbnail for \${gameDir}:\`, error);
         debugLog('ERROR: Stack trace:', error.stack);
@@ -284,7 +356,18 @@ async function main() {
         }
         
         try {
+            // Set a global timeout for this game's thumbnail generation (2 minutes max)
+            const gameTimeout = setTimeout(() => {
+                debugLog(\`ERROR: Global timeout reached for \${dir} after 120 seconds\`);
+                console.error(\`Thumbnail generation for \${dir} timed out after 120 seconds\`);
+                // Can't really abort the operation, but this will log the timeout
+                // The next game will still be processed
+            }, 120000);
+            
             await generateThumbnail(gamePath, outputDir, width, height);
+            
+            // Clear the timeout if successful
+            clearTimeout(gameTimeout);
         } catch (dirError) {
             debugLog('ERROR processing directory:', dirError);
         }

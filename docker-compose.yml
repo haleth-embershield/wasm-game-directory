@@ -27,7 +27,7 @@ services:
       - DEBUG=true
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost"]
-      interval: 1m
+      interval: 5m
       timeout: 10s
       retries: 3
 
