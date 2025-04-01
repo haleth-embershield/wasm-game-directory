@@ -232,27 +232,9 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
         debugLog('Waiting 5 seconds for game to render');
         await sleep(5000);
         
-        // Try to interact with the page to trigger game rendering if needed
-        try {
-            await page.evaluate(() => {
-                // Click in the middle of the screen to potentially start the game
-                const event = new MouseEvent('click', {
-                    bubbles: true,
-                    cancelable: true,
-                    view: window,
-                    clientX: window.innerWidth / 2,
-                    clientY: window.innerHeight / 2
-                });
-                document.elementFromPoint(window.innerWidth/2, window.innerHeight/2)?.dispatchEvent(event);
-            });
-            debugLog('Triggered click event to start game');
-            
-            // Wait a bit more for the game to respond
-            await sleep(2000);
-        } catch (interactError) {
-            debugLog('Error during interaction:', interactError);
-        }
-
+        // Skip interaction/clicking and just take the screenshot
+        debugLog('Taking screenshot of initial game state without interaction');
+        
         // Take screenshot with timeout
         const thumbPath = path.join(outputDir, \`raw-screenshot.png\`);
         debugLog(\`Attempting to capture screenshot to \${thumbPath}\`);

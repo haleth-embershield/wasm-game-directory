@@ -25,6 +25,8 @@ services:
       - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
       - DISPLAY=:99
       - DEBUG=true
+      # Control thumbnail generation
+      - GENERATE_THUMBNAILS=false
     # GPU passthrough
     devices:
       - /dev/dri:/dev/dri  # GPU device passthrough

@@ -85,8 +85,15 @@ EOF
     jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
         game_name=$(echo "$game" | jq -r '.name')
         game_desc=$(echo "$game" | jq -r '.description')
-        # For debugging, use raw-screenshot.png directly since we know it exists
-        game_thumb="/$game_name/raw-screenshot.png"
+        
+        # Determine which thumbnail to use based on GENERATE_THUMBNAILS
+        if [ "$GENERATE_THUMBNAILS" = "true" ]; then
+            # Use raw screenshot when thumbnails are enabled
+            game_thumb="/$game_name/raw-screenshot.png"
+        else
+            # Use a default placeholder when thumbnails are disabled
+            game_thumb="/static/default-thumb.png"
+        fi
         
         # Add game to grid
         cat >> "$WEB_DIR/index.html" << EOF
@@ -198,9 +205,9 @@ fi
 # Create default thumbnail if it doesn't exist
 if [ ! -f "$WEB_DIR/static/default-thumb.png" ]; then
     mkdir -p "$WEB_DIR/static"
-    # Comment out the default thumbnail creation temporarily for debugging
-    # echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" | base64 -d > "$WEB_DIR/static/default-thumb.png"
-    echo "Skipping default thumbnail creation for debugging"
+    # Create a simple default thumbnail using base64-encoded 1x1 transparent PNG
+    echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" | base64 -d > "$WEB_DIR/static/default-thumb.png"
+    echo "Created default thumbnail placeholder"
 fi
 
 # Process each game in the JSON file
@@ -295,21 +302,26 @@ jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
     rm -rf "$REPO_PATH"
 done
 
-# Generate thumbnails for all games
-echo "Starting thumbnail generation in background..."
-if [ -f "/scripts/thumbnail_generator.sh" ]; then
-    # Run thumbnail generator in background
-    /scripts/thumbnail_generator.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
-    echo "Thumbnail generation running in background with PID $!"
-else
-    echo "Warning: thumbnail_generator.sh not found. Trying alternative generators..."
-    # Try puppeteer version as fallback
-    if [ -f "/scripts/thumbnail_generator_puppeteer.sh" ]; then
-        /scripts/thumbnail_generator_puppeteer.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
-        echo "Puppeteer thumbnail generation running in background with PID $!"
+# Generate thumbnails for all games (if enabled)
+GENERATE_THUMBNAILS=${GENERATE_THUMBNAILS:-false}
+if [ "$GENERATE_THUMBNAILS" = "true" ]; then
+    echo "Starting thumbnail generation in background..."
+    if [ -f "/scripts/thumbnail_generator.sh" ]; then
+        # Run thumbnail generator in background
+        /scripts/thumbnail_generator.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
+        echo "Thumbnail generation running in background with PID $!"
     else
-        echo "Error: No thumbnail generator found. Thumbnails will not be generated."
+        echo "Warning: thumbnail_generator.sh not found. Trying alternative generators..."
+        # Try puppeteer version as fallback
+        if [ -f "/scripts/thumbnail_generator_puppeteer.sh" ]; then
+            /scripts/thumbnail_generator_puppeteer.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
+            echo "Puppeteer thumbnail generation running in background with PID $!"
+        else
+            echo "Error: No thumbnail generator found. Thumbnails will not be generated."
+        fi
     fi
+else
+    echo "Thumbnail generation disabled by GENERATE_THUMBNAILS=$GENERATE_THUMBNAILS"
 fi
 
 # Generate the homepage
