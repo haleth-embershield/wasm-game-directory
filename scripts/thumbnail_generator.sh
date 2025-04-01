@@ -254,7 +254,7 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
         }
 
         // Take screenshot with timeout
-        const thumbPath = path.join(outputDir, \`thumbnail.png\`);
+        const thumbPath = path.join(outputDir, \`raw-screenshot.png\`);
         debugLog(\`Attempting to capture screenshot to \${thumbPath}\`);
         
         try {
@@ -284,13 +284,13 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
                 throw new Error('Screenshot file was not created');
             }
 
-            // Resize to thumbnail
+            // Resize to thumbnail using different filenames for input and output
             debugLog('Resizing screenshot to thumbnail size');
             await sharp(thumbPath)
                 .resize(width, height)
                 .toFile(path.join(outputDir, \`thumbnail-\${width}x\${height}.png\`));
             
-            // Also save as standard thumbnail.png for easier reference
+            // Create standard thumbnail.png from the raw screenshot
             await sharp(thumbPath)
                 .resize(width, height)
                 .toFile(path.join(outputDir, \`thumbnail.png\`));

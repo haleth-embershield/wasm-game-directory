@@ -85,8 +85,8 @@ EOF
     jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
         game_name=$(echo "$game" | jq -r '.name')
         game_desc=$(echo "$game" | jq -r '.description')
-        # Always reference the game's thumbnail - Nginx will serve default if missing
-        game_thumb="/$game_name/thumbnail.png"
+        # For debugging, use raw-screenshot.png directly since we know it exists
+        game_thumb="/$game_name/raw-screenshot.png"
         
         # Add game to grid
         cat >> "$WEB_DIR/index.html" << EOF
@@ -198,9 +198,9 @@ fi
 # Create default thumbnail if it doesn't exist
 if [ ! -f "$WEB_DIR/static/default-thumb.png" ]; then
     mkdir -p "$WEB_DIR/static"
-    # Create a simple default thumbnail using base64-encoded 1x1 transparent PNG
-    echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" | base64 -d > "$WEB_DIR/static/default-thumb.png"
-    echo "Created default thumbnail placeholder"
+    # Comment out the default thumbnail creation temporarily for debugging
+    # echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" | base64 -d > "$WEB_DIR/static/default-thumb.png"
+    echo "Skipping default thumbnail creation for debugging"
 fi
 
 # Process each game in the JSON file
