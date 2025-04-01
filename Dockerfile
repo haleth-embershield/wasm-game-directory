@@ -13,28 +13,29 @@ RUN apk add --no-cache \
     nodejs \
     npm \
     unzip \
-    # Dependencies for Playwright
+    # Dependencies for Puppeteer with GPU support
     chromium \
-    nss \
-    freetype \
-    freetype-dev \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    dbus \
-    fontconfig \
+    mesa-dri-gallium \
     mesa-gl \
     mesa-egl \
     mesa-gles \
-    libstdc++ \
+    mesa-vulkan-intel \
+    mesa-vulkan-layers \
+    ttf-freefont \
     pango \
-    xvfb
+    libstdc++ \
+    harfbuzz \
+    nss \
+    freetype \
+    freetype-dev \
+    dbus \
+    fontconfig \
+    xvfb \
+    eudev
 
-# Set SwiftShader and Playwright environment variables
-ENV SWIFTSHADER_DISABLE_PERFETTO=1 \
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 \
-    PLAYWRIGHT_BROWSERS_PATH=/playwright-browsers \
-    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+# Set Puppeteer environment variables
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     DISPLAY=:99
 
 # Install Zig (latest version)
@@ -44,16 +45,6 @@ ENV PATH="/usr/local/zig-linux-x86_64-0.14.0:${PATH}"
 # Install Bun
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
-
-# Install Playwright in its own directory
-RUN mkdir -p /playwright-browsers && \
-    mkdir -p /playwright-install && \
-    cd /playwright-install && \
-    echo '{"name":"playwright-install","version":"1.0.0","private":true}' > package.json && \
-    npm install playwright-chromium playwright-core && \
-    # Set up chromium with SwiftShader
-    mkdir -p /root/.config/chromium-browser && \
-    echo '{"use_angle":true,"use_swift_shader":true}' > /root/.config/chromium-browser/Local\ State
 
 # Create necessary directories
 RUN mkdir -p /games /hashes /config /scripts

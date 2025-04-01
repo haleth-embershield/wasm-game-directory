@@ -293,7 +293,14 @@ if [ -f "/scripts/thumbnail_generator.sh" ]; then
     /scripts/thumbnail_generator.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
     echo "Thumbnail generation running in background with PID $!"
 else
-    echo "Warning: thumbnail_generator.sh not found. Skipping thumbnail generation."
+    echo "Warning: thumbnail_generator.sh not found. Trying alternative generators..."
+    # Try puppeteer version as fallback
+    if [ -f "/scripts/thumbnail_generator_puppeteer.sh" ]; then
+        /scripts/thumbnail_generator_puppeteer.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
+        echo "Puppeteer thumbnail generation running in background with PID $!"
+    else
+        echo "Error: No thumbnail generator found. Thumbnails will not be generated."
+    fi
 fi
 
 # Generate the homepage

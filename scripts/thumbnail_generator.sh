@@ -2,17 +2,16 @@
 set -e
 
 # Thumbnail Generator for WASM Game Directory
-# Uses Bun + Playwright to generate thumbnails from game screens with WebGL support
-# TODO: Future version will use Zig natively
+# Uses Bun + Puppeteer to generate thumbnails from game screens with GPU acceleration
 
 GAMES_DIR=${1:-"/games"}
 WEB_DIR=${2:-"/usr/share/nginx/html"}
 THUMB_SIZE=${3:-"200x150"}
-PLAYWRIGHT_TIMEOUT=${PLAYWRIGHT_TIMEOUT:-60000}
+PUPPETEER_TIMEOUT=${PUPPETEER_TIMEOUT:-60000}
 DEBUG=${DEBUG:-"false"}
 
 echo "Starting thumbnail generation for games in $GAMES_DIR"
-echo "Using Playwright timeout of $PLAYWRIGHT_TIMEOUT ms"
+echo "Using Puppeteer timeout of $PUPPETEER_TIMEOUT ms"
 echo "Debug mode: $DEBUG"
 
 # Make sure Xvfb is running
@@ -35,25 +34,30 @@ echo "System information:"
 free -h || echo "free command not found"
 df -h | grep -E '/$|/tmp' || echo "df command failed"
 
+# Check GPU availability 
+echo "GPU Information:"
+ls -la /dev/dri/ || echo "No DRI devices found"
+glxinfo | grep "OpenGL renderer" || echo "glxinfo not available"
+
 # Initialize Bun project and install dependencies
 echo "Installing dependencies..."
 bun init -y
-bun add playwright-chromium sharp
+bun add puppeteer sharp
 
-# Enable debugging if needed
+# Enable Puppeteer debugging if needed
 if [ "$DEBUG" = "true" ]; then
-  export DEBUG="playwright:*"
+  export DEBUG="puppeteer:*"
 fi
 
 # Create the thumbnail generation script
 cat > generate-thumbnails.js << EOF
-const { chromium } = require('playwright-chromium');
+const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 
 // Use timeout from environment variable
-const PLAYWRIGHT_TIMEOUT = parseInt(process.env.PLAYWRIGHT_TIMEOUT || '60000');
+const PUPPETEER_TIMEOUT = parseInt(process.env.PUPPETEER_TIMEOUT || '60000');
 const DEBUG = process.env.DEBUG === 'true';
 
 // Helper function to log debug info
@@ -61,6 +65,11 @@ function debugLog(...args) {
   if (DEBUG || args[0] === 'ERROR') {
     console.log('[DEBUG]', ...args);
   }
+}
+
+// Helper function for timeout (since waitForTimeout isn't available in Bun)
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) {
@@ -73,46 +82,53 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
         return;
     }
     
-    debugLog('Launching browser with SwiftShader WebGL support');
+    debugLog('Launching browser with GPU acceleration');
     
-    // Launch browser with SwiftShader for WebGL support
-    const browser = await chromium.launch({
-        executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+    // Global timeout for the entire process
+    const globalTimeout = setTimeout(() => {
+        debugLog(\`ERROR: Global timeout reached for \${gameDir} after 120 seconds\`);
+        console.error(\`Thumbnail generation for \${gameDir} timed out after 120 seconds\`);
+    }, 120000);
+    
+    // Launch browser with GPU support
+    const browser = await puppeteer.launch({ 
+        headless: 'new',
         args: [
-            '--use-gl=angle',
-            '--use-angle=swiftshader',
-            '--ignore-gpu-blocklist',
-            '--enable-gpu-rasterization',
-            '--enable-oop-rasterization',
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--window-size=1280,720',
-            '--disable-accelerated-video-decode',
-            '--disable-gpu-sandbox'
+          '--no-sandbox', 
+          '--disable-setuid-sandbox',
+          '--enable-gpu',
+          '--ignore-gpu-blocklist',
+          '--enable-webgl',
+          '--enable-webgpu',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--window-size=1280,720'
         ],
-        headless: true,
-        timeout: PLAYWRIGHT_TIMEOUT
+        protocolTimeout: PUPPETEER_TIMEOUT,
+        dumpio: DEBUG // Log browser process stdout/stderr
     });
     
     try {
         debugLog('Browser launched successfully');
-        const context = await browser.newContext({
-            viewport: { width: 1280, height: 720 },
-            deviceScaleFactor: 1
+        const page = await browser.newPage();
+        
+        // Listen for console messages from the page
+        page.on('console', message => debugLog('CONSOLE:', message.type(), message.text()));
+        
+        // Listen for errors
+        page.on('error', err => debugLog('ERROR:', err.toString()));
+        page.on('pageerror', err => debugLog('PAGE ERROR:', err.toString()));
+        
+        // Listen for request failures
+        page.on('requestfailed', request => {
+          debugLog('REQUEST FAILED:', request.url(), 'with error', request.failure().errorText);
         });
         
-        // Enable debug logs for browser console
-        if (DEBUG) {
-            context.on('console', msg => {
-                debugLog('CONSOLE:', msg.type(), msg.text());
-            });
-        }
-        
-        const page = await context.newPage();
-        
+        await page.setViewport({ width: 1280, height: 720 });
+        debugLog('Viewport set to 1280x720');
+
         // Inject WebGL debug info extractor
-        await page.addInitScript(() => {
+        await page.evaluateOnNewDocument(() => {
             window.extractWebGLInfo = () => {
                 try {
                     const canvas = document.createElement('canvas');
@@ -133,47 +149,40 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
             };
         });
 
-        // Load the game
+        // Load the game with safety timeout
         const fileUrl = \`file://\${path.resolve(gamePath)}\`;
         debugLog(\`Attempting to load \${fileUrl}\`);
         
         // Set a safety timeout to prevent hanging
         const safetyTimeout = setTimeout(() => {
-            debugLog('ERROR: Safety timeout triggered after 30 seconds');
-            // Continue execution even if page.goto hangs
-            throw new Error('Navigation timeout - safety mechanism');
+            debugLog('ERROR: Page load safety timeout triggered after 30 seconds');
+            // We'll continue execution even if page.goto hangs
         }, 30000);
         
         try {
             debugLog('Starting page navigation...');
             await Promise.race([
                 page.goto(fileUrl, { 
-                    waitUntil: 'networkidle',
-                    timeout: PLAYWRIGHT_TIMEOUT / 2 // Use shorter timeout for navigation
+                    waitUntil: 'networkidle0',
+                    timeout: PUPPETEER_TIMEOUT / 2
                 }),
-                // Secondary timeout as additional safety
+                // Secondary timeout as extra safety
                 new Promise((_, reject) => 
                     setTimeout(() => reject(new Error('Navigation timeout')), 
-                    PLAYWRIGHT_TIMEOUT / 2)
+                    PUPPETEER_TIMEOUT / 2)
                 )
             ]);
-            debugLog('Page navigation completed');
             
-            // Clear the safety timeout since navigation succeeded
             clearTimeout(safetyTimeout);
-            
             debugLog('Page loaded successfully');
             
             // Check if WebGL is available and log info with a timeout
             debugLog('Extracting WebGL info...');
             try {
-                // Set a timeout for WebGL extraction
                 const webglTimeout = setTimeout(() => {
                     debugLog('ERROR: WebGL info extraction timeout after 10 seconds');
-                    throw new Error('WebGL extraction timeout');
                 }, 10000);
                 
-                // Use Promise.race to ensure the evaluation doesn't hang
                 const webglInfo = await Promise.race([
                     page.evaluate(() => window.extractWebGLInfo()),
                     new Promise((_, reject) => 
@@ -186,7 +195,7 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
                 debugLog('WebGL Info:', JSON.stringify(webglInfo, null, 2));
                 
                 if (webglInfo.supported) {
-                    debugLog('WebGL is supported! Using hardware/software rendering');
+                    debugLog('WebGL is supported! Using GPU rendering');
                 } else {
                     debugLog('WebGL not supported. Game may not render correctly:', webglInfo.reason);
                 }
@@ -194,25 +203,20 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
                 debugLog('ERROR: WebGL info extraction failed:', webglError);
                 debugLog('Continuing despite WebGL extraction failure');
             }
-            
         } catch (loadError) {
-            // Clear the safety timeout to prevent unexpected throws
             clearTimeout(safetyTimeout);
-            
             debugLog('ERROR: Page load failed', loadError);
-            debugLog('Attempting to continue despite load error');
             
             // Try a different approach with simpler loading options
             debugLog('Attempting simplified page load...');
             try {
                 await page.goto(fileUrl, { 
-                    waitUntil: 'domcontentloaded', // Less strict waiting condition
-                    timeout: 10000 // Short timeout
+                    waitUntil: 'domcontentloaded',
+                    timeout: 10000
                 });
                 debugLog('Simplified page load completed');
             } catch (retryError) {
                 debugLog('Simplified load also failed:', retryError);
-                // Continue anyway, might still be able to take a screenshot
             }
         }
         
@@ -226,7 +230,7 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
         
         // Wait a bit longer for rendering
         debugLog('Waiting 5 seconds for game to render');
-        await page.waitForTimeout(5000);
+        await sleep(5000);
         
         // Try to interact with the page to trigger game rendering if needed
         try {
@@ -244,20 +248,18 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
             debugLog('Triggered click event to start game');
             
             // Wait a bit more for the game to respond
-            await page.waitForTimeout(1000);
+            await sleep(2000);
         } catch (interactError) {
             debugLog('Error during interaction:', interactError);
         }
 
-        // Take screenshot
+        // Take screenshot with timeout
         const thumbPath = path.join(outputDir, \`thumbnail.png\`);
         debugLog(\`Attempting to capture screenshot to \${thumbPath}\`);
         
         try {
-            // Set a timeout for the screenshot process
             const screenshotTimeout = setTimeout(() => {
                 debugLog('ERROR: Screenshot timeout triggered after 15 seconds');
-                throw new Error('Screenshot timeout');
             }, 15000);
             
             await page.screenshot({ 
@@ -291,7 +293,6 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
             console.log(\`Generated thumbnail for \${gameDir}\`);
         } catch (screenshotError) {
             debugLog('ERROR: Screenshot capture failed:', screenshotError);
-            // Continue to finally block for cleanup
         }
     } catch (error) {
         console.error(\`Error generating thumbnail for \${gameDir}:\`, error);
@@ -309,6 +310,7 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
             debugLog('Failed to save error screenshot:', screenshotError);
         }
     } finally {
+        clearTimeout(globalTimeout);
         debugLog('Closing browser');
         await browser.close();
         debugLog('Browser closed');
@@ -320,16 +322,16 @@ async function main() {
     const width = parseInt(process.argv[3]) || 200;
     const height = parseInt(process.argv[4]) || 150;
     
-    // Verify DISPLAY environment variable
+    // Verify GPU and environment
     debugLog('DISPLAY environment variable:', process.env.DISPLAY || '(not set)');
+    debugLog('Puppeteer executable path:', process.env.PUPPETEER_EXECUTABLE_PATH || '(default)');
     
     // Log environment info
     debugLog('Node version:', process.version);
     debugLog('Platform:', process.platform);
     debugLog('Architecture:', process.arch);
-    debugLog('Playwright version:', require('playwright-chromium/package.json').version);
-    debugLog('Chromium path:', process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '(default)');
-    debugLog('Timeout:', PLAYWRIGHT_TIMEOUT);
+    debugLog('Puppeteer version:', require('puppeteer/package.json').version);
+    debugLog('Puppeteer timeout:', PUPPETEER_TIMEOUT);
     
     // Check available memory
     try {
@@ -345,7 +347,7 @@ async function main() {
 
     console.log(\`Found \${gameDirs.length} potential game directories\`);
     
-    // Process each game directory
+    // Process each game directory with a timeout
     for (const dir of gameDirs) {
         const gamePath = path.join(gamesDir, dir);
         const outputDir = gamePath; // Save thumbnail in the game's directory
@@ -356,21 +358,13 @@ async function main() {
         }
         
         try {
-            // Set a global timeout for this game's thumbnail generation (2 minutes max)
-            const gameTimeout = setTimeout(() => {
-                debugLog(\`ERROR: Global timeout reached for \${dir} after 120 seconds\`);
-                console.error(\`Thumbnail generation for \${dir} timed out after 120 seconds\`);
-                // Can't really abort the operation, but this will log the timeout
-                // The next game will still be processed
-            }, 120000);
-            
             await generateThumbnail(gamePath, outputDir, width, height);
-            
-            // Clear the timeout if successful
-            clearTimeout(gameTimeout);
         } catch (dirError) {
             debugLog('ERROR processing directory:', dirError);
         }
+        
+        // Add a small delay between games to let GPU resources recover
+        await sleep(1000);
     }
 }
 
@@ -382,7 +376,7 @@ EOF
 
 # Run the script with our parameters and enable debugging
 echo "Generating thumbnails..."
-DEBUG=true PLAYWRIGHT_TIMEOUT=$PLAYWRIGHT_TIMEOUT DISPLAY=:99 bun generate-thumbnails.js "$GAMES_DIR" "$WIDTH" "$HEIGHT"
+DEBUG=true PUPPETEER_TIMEOUT=$PUPPETEER_TIMEOUT bun generate-thumbnails.js "$GAMES_DIR" "$WIDTH" "$HEIGHT"
 
 # Copy thumbnails to web directories
 echo "Copying thumbnails to web directories..."
@@ -409,11 +403,4 @@ done
 # Clean up
 rm -rf "$TEMP_DIR"
 
-echo "Thumbnail generation complete!"
-
-# TODO: Future Zig-based implementation
-# The future Zig implementation would:
-# 1. Use Wasmtime or Wasmer via Zig bindings to execute WASM
-# 2. Capture rendering output using a WebGL or Canvas simulation
-# 3. Use zigimg for image processing and resizing
-# 4. Integrate directly with the Zig build system 
+echo "Thumbnail generation complete!" 

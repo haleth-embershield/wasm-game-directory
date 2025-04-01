@@ -20,11 +20,20 @@ services:
       - TZ=UTC
       # Optional: set rebuild frequency (in hours)
       - REBUILD_FREQUENCY=6
-      # Playwright and SwiftShader settings
-      - PLAYWRIGHT_TIMEOUT=60000
-      - SWIFTSHADER_DISABLE_PERFETTO=1
+      # Puppeteer and GPU settings
+      - PUPPETEER_TIMEOUT=60000
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
       - DISPLAY=:99
       - DEBUG=true
+    # GPU passthrough
+    devices:
+      - /dev/dri:/dev/dri  # GPU device passthrough
+    # Security settings for GPU access
+    security_opt:
+      - seccomp=unconfined
+    # Add GPU capabilities
+    cap_add:
+      - SYS_ADMIN
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost"]
       interval: 5m
