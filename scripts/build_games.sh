@@ -110,12 +110,8 @@ EOF
     jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
         game_name=$(echo "$game" | jq -r '.name')
         game_desc=$(echo "$game" | jq -r '.description')
-        game_thumb="/static/default-thumb.png"
-        
-        # Use generated thumbnail if it exists
-        if [ -f "$WEB_DIR/$game_name/thumbnail.png" ]; then
-            game_thumb="/$game_name/thumbnail.png"
-        fi
+        # Always reference the game's thumbnail - Nginx will serve default if missing
+        game_thumb="/$game_name/thumbnail.png"
         
         # Add game to grid
         cat >> "$WEB_DIR/index.html" << EOF
