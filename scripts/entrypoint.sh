@@ -10,10 +10,6 @@ echo "Setting rebuild frequency to every ${REBUILD_FREQUENCY} hours"
 # Set up cron job with dynamic frequency
 echo "0 */${REBUILD_FREQUENCY} * * * /scripts/build_games.sh /config/games.json" > /etc/crontabs/root
 
-# Make scripts executable
-echo "Setting script permissions..."
-chmod +x /scripts/*.sh
-
 # Run the build script initially
 echo "Running initial build..."
 /scripts/build_games.sh /config/games.json
