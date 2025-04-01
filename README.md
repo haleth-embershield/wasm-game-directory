@@ -7,26 +7,38 @@ A static site to host multiple WASM games built with Zig, with a simple build an
 - Bash scripts for initial implementation, with Go/Zig versions planned for comparison
 - Static HTML/CSS/JS with no server-side interactivity
 - Each game is a separate Zig project targeting WASM freestanding
+- Automatic thumbnail generation using Bun + Puppeteer
 
 ## Current Build Dependencies
 - Zig (for building games)
-- Bun (for games that need JavaScript bundling)
+- Bun (for games that need JavaScript bundling and thumbnail generation)
 - Nginx (for serving static files)
+- Chromium (headless browser for thumbnail capture)
+
+## Features
+- Build system to pull, build, and deploy Zig WASM games
+- Game grid homepage with generated thumbnails
+- Minimal templates for game pages and info pages
+- Automated thumbnail generation from game screenshots
+
+## How Thumbnail Generation Works
+The system automatically generates thumbnails for each game by:
+1. Loading each game in a headless Chromium browser via Puppeteer
+2. Taking a screenshot of the first frame/screen
+3. Resizing to a standard thumbnail size (200x150px by default)
+4. Including these thumbnails in the game directory homepage
 
 TODO:
-- Build Bash script to pull, build, and deploy Zig WASM games
-- Implement game grid homepage with thumbnails
-- Create minimal templates for game pages and info pages
+- Implement tag-based filtering on the homepage
+- Add game previews on hover using minimal JavaScript
 
 LATER:
 - Reimplement build system in Go/Zig for performance comparison
 - Use templates to provide consistent navigation and styling
-- Implement tag-based filtering on the homepage
-- Add game previews on hover using minimal JavaScript
+- Reimplement thumbnail generator in Zig using native tools
 
 LATERER:
 - Consider HTMX for enhanced client-side features without full frameworks
-- Automate thumbnail/preview generation
 
 ## Future Dependency Management Options
 Consider one of these approaches for future development:

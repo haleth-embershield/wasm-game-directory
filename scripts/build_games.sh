@@ -110,14 +110,19 @@ EOF
     jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
         game_name=$(echo "$game" | jq -r '.name')
         game_desc=$(echo "$game" | jq -r '.description')
-        game_thumb=$(echo "$game" | jq -r '.thumbnail')
+        game_thumb="/static/default-thumb.png"
+        
+        # Use generated thumbnail if it exists
+        if [ -f "$WEB_DIR/$game_name/thumbnail.png" ]; then
+            game_thumb="/$game_name/thumbnail.png"
+        fi
         
         # Add game to grid
         cat >> "$WEB_DIR/index.html" << EOF
             <div class="game-card">
                 <a href="/${game_name}">
                     <div class="game-thumb">
-                        <img src="/${game_name}/${game_thumb}" alt="${game_name}">
+                        <img src="${game_thumb}" alt="${game_name}">
                     </div>
                     <div class="game-info">
                         <h2>${game_name}</h2>
@@ -219,6 +224,14 @@ footer {
 EOF
 fi
 
+# Create default thumbnail if it doesn't exist
+if [ ! -f "$WEB_DIR/static/default-thumb.png" ]; then
+    mkdir -p "$WEB_DIR/static"
+    # Create a simple default thumbnail using base64-encoded 1x1 transparent PNG
+    echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" | base64 -d > "$WEB_DIR/static/default-thumb.png"
+    echo "Created default thumbnail placeholder"
+fi
+
 # Process each game in the JSON file
 jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
     GAME_NAME=$(echo "$game" | jq -r '.name')
@@ -300,6 +313,14 @@ jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
     cd /
     rm -rf "$REPO_PATH"
 done
+
+# Generate thumbnails for all games
+echo "Generating thumbnails for games..."
+if [ -f "/scripts/thumbnail_generator.sh" ]; then
+    /scripts/thumbnail_generator.sh "$GAMES_DIR" "$WEB_DIR" "200x150"
+else
+    echo "Warning: thumbnail_generator.sh not found. Skipping thumbnail generation."
+fi
 
 # Generate the homepage
 generate_homepage
