@@ -27,36 +27,11 @@ generate_game_html() {
     local game_tags=$3
     
     # Create game directory if it doesn't exist
-    mkdir -p "$WEB_DIR/$game_name"
+    mkdir -p "$GAME_PATH"
     
-    # Generate game.html
-    cat > "$WEB_DIR/$game_name/index.html" << EOF
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${game_name}</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <header>
-        <nav>
-            <a href="/">Home</a>
-            <a href="/${game_name}/info">Info</a>
-        </nav>
-    </header>
-    <main class="game-container">
-        <div id="game"></div>
-    </main>
-    <script src="/${game_name}/main.js"></script>
-</body>
-</html>
-EOF
-
-    # Generate info.html
-    mkdir -p "$WEB_DIR/$game_name/info"
-    cat > "$WEB_DIR/$game_name/info/index.html" << EOF
+    # Only generate info.html, not index.html (to preserve game's original index.html)
+    mkdir -p "$GAME_PATH/info"
+    cat > "$GAME_PATH/info/index.html" << EOF
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -110,11 +85,14 @@ EOF
     jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
         game_name=$(echo "$game" | jq -r '.name')
         game_desc=$(echo "$game" | jq -r '.description')
-        game_thumb="/static/default-thumb.png"
         
-        # Use generated thumbnail if it exists
-        if [ -f "$WEB_DIR/$game_name/thumbnail.png" ]; then
-            game_thumb="/$game_name/thumbnail.png"
+        # Determine which thumbnail to use based on GENERATE_THUMBNAILS
+        if [ "$GENERATE_THUMBNAILS" = "true" ]; then
+            # Use raw screenshot when thumbnails are enabled
+            game_thumb="/$game_name/raw-screenshot.png"
+        else
+            # Use a default placeholder when thumbnails are disabled
+            game_thumb="/static/default-thumb.png"
         fi
         
         # Add game to grid
@@ -306,20 +284,44 @@ jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
     
     # Link game assets to web directory
     echo "Linking game assets to web directory..."
-    mkdir -p "$WEB_DIR/$GAME_NAME"
-    cp -r "$GAME_PATH/"* "$WEB_DIR/$GAME_NAME/"
+    
+    # Create parent directory if it doesn't exist
+    mkdir -p "$WEB_DIR"
+    
+    # Remove existing symlink or directory
+    if [ -e "$WEB_DIR/$GAME_NAME" ]; then
+        rm -rf "$WEB_DIR/$GAME_NAME"
+    fi
+    
+    # Create a symlink of the entire directory instead of individual files
+    ln -sf "$GAME_PATH" "$WEB_DIR/$GAME_NAME"
+    echo "Created symlink from $GAME_PATH to $WEB_DIR/$GAME_NAME"
     
     # Clean up repo to save space
     cd /
     rm -rf "$REPO_PATH"
 done
 
-# Generate thumbnails for all games
-echo "Generating thumbnails for games..."
-if [ -f "/scripts/thumbnail_generator.sh" ]; then
-    /scripts/thumbnail_generator.sh "$GAMES_DIR" "$WEB_DIR" "200x150"
+# Generate thumbnails for all games (if enabled)
+GENERATE_THUMBNAILS=${GENERATE_THUMBNAILS:-false}
+if [ "$GENERATE_THUMBNAILS" = "true" ]; then
+    echo "Starting thumbnail generation in background..."
+    if [ -f "/scripts/thumbnail_generator.sh" ]; then
+        # Run thumbnail generator in background
+        /scripts/thumbnail_generator.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
+        echo "Thumbnail generation running in background with PID $!"
+    else
+        echo "Warning: thumbnail_generator.sh not found. Trying alternative generators..."
+        # Try puppeteer version as fallback
+        if [ -f "/scripts/thumbnail_generator_puppeteer.sh" ]; then
+            /scripts/thumbnail_generator_puppeteer.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
+            echo "Puppeteer thumbnail generation running in background with PID $!"
+        else
+            echo "Error: No thumbnail generator found. Thumbnails will not be generated."
+        fi
+    fi
 else
-    echo "Warning: thumbnail_generator.sh not found. Skipping thumbnail generation."
+    echo "Thumbnail generation disabled by GENERATE_THUMBNAILS=$GENERATE_THUMBNAILS"
 fi
 
 # Generate the homepage

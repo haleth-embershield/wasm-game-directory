@@ -31,6 +31,7 @@ The system automatically generates thumbnails for each game by:
 TODO:
 - Implement tag-based filtering on the homepage
 - Add game previews on hover using minimal JavaScript
+- Develop a solution to inject consistent header/footer elements into game HTML files without replacing them
 
 LATER:
 - Reimplement build system in Go/Zig for performance comparison

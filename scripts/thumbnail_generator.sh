@@ -2,8 +2,7 @@
 set -e
 
 # Thumbnail Generator for WASM Game Directory
-# Uses Bun + Puppeteer to generate thumbnails from game screens
-# TODO: Future version will use Zig natively
+# Uses Bun + Puppeteer to generate thumbnails from game screens with GPU acceleration
 
 GAMES_DIR=${1:-"/games"}
 WEB_DIR=${2:-"/usr/share/nginx/html"}
@@ -14,6 +13,13 @@ DEBUG=${DEBUG:-"false"}
 echo "Starting thumbnail generation for games in $GAMES_DIR"
 echo "Using Puppeteer timeout of $PUPPETEER_TIMEOUT ms"
 echo "Debug mode: $DEBUG"
+
+# Make sure Xvfb is running
+if ! pgrep Xvfb > /dev/null; then
+  echo "Starting Xvfb virtual display..."
+  Xvfb :99 -screen 0 1280x720x24 -ac &
+  sleep 2
+fi
 
 # Extract width and height from THUMB_SIZE
 WIDTH=$(echo $THUMB_SIZE | cut -d'x' -f1)
@@ -27,6 +33,11 @@ cd $TEMP_DIR
 echo "System information:"
 free -h || echo "free command not found"
 df -h | grep -E '/$|/tmp' || echo "df command failed"
+
+# Check GPU availability 
+echo "GPU Information:"
+ls -la /dev/dri/ || echo "No DRI devices found"
+glxinfo | grep "OpenGL renderer" || echo "glxinfo not available"
 
 # Initialize Bun project and install dependencies
 echo "Installing dependencies..."
@@ -71,27 +82,27 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
         return;
     }
     
-    debugLog('Launching browser with the following options:', {
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
-      protocolTimeout: PUPPETEER_TIMEOUT,
-      timeout: PUPPETEER_TIMEOUT
-    });
+    debugLog('Launching browser with GPU acceleration');
     
-    // Launch browser with increased timeout and more debug flags
+    // Global timeout for the entire process
+    const globalTimeout = setTimeout(() => {
+        debugLog(\`ERROR: Global timeout reached for \${gameDir} after 120 seconds\`);
+        console.error(\`Thumbnail generation for \${gameDir} timed out after 120 seconds\`);
+    }, 120000);
+    
+    // Launch browser with GPU support
     const browser = await puppeteer.launch({ 
         headless: 'new',
         args: [
           '--no-sandbox', 
           '--disable-setuid-sandbox',
-          '--disable-gpu',
+          '--enable-gpu',
+          '--ignore-gpu-blocklist',
+          '--enable-webgl',
+          '--enable-webgpu',
           '--disable-web-security',
           '--disable-features=IsolateOrigins,site-per-process',
-          '--no-zygote',
-          '--no-first-run',
-          '--window-size=1280,720',
-          '--disable-accelerated-2d-canvas',
-          '--disable-gl-drawing-for-tests'
+          '--window-size=1280,720'
         ],
         protocolTimeout: PUPPETEER_TIMEOUT,
         dumpio: DEBUG // Log browser process stdout/stderr
@@ -116,65 +127,160 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
         await page.setViewport({ width: 1280, height: 720 });
         debugLog('Viewport set to 1280x720');
 
-        // Load the game with extra debug info
+        // Inject WebGL debug info extractor
+        await page.evaluateOnNewDocument(() => {
+            window.extractWebGLInfo = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (!gl) return { supported: false, reason: 'WebGL context creation failed' };
+                    
+                    return {
+                        supported: true,
+                        vendor: gl.getParameter(gl.VENDOR),
+                        renderer: gl.getParameter(gl.RENDERER),
+                        version: gl.getParameter(gl.VERSION),
+                        shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+                        extensions: gl.getSupportedExtensions()
+                    };
+                } catch (err) {
+                    return { supported: false, reason: err.toString() };
+                }
+            };
+        });
+
+        // Load the game with safety timeout
         const fileUrl = \`file://\${path.resolve(gamePath)}\`;
         debugLog(\`Attempting to load \${fileUrl}\`);
         
+        // Set a safety timeout to prevent hanging
+        const safetyTimeout = setTimeout(() => {
+            debugLog('ERROR: Page load safety timeout triggered after 30 seconds');
+            // We'll continue execution even if page.goto hangs
+        }, 30000);
+        
         try {
-            await page.goto(fileUrl, { 
-                waitUntil: 'networkidle0',
-                timeout: PUPPETEER_TIMEOUT
-            });
+            debugLog('Starting page navigation...');
+            await Promise.race([
+                page.goto(fileUrl, { 
+                    waitUntil: 'networkidle0',
+                    timeout: PUPPETEER_TIMEOUT / 2
+                }),
+                // Secondary timeout as extra safety
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Navigation timeout')), 
+                    PUPPETEER_TIMEOUT / 2)
+                )
+            ]);
+            
+            clearTimeout(safetyTimeout);
             debugLog('Page loaded successfully');
+            
+            // Check if WebGL is available and log info with a timeout
+            debugLog('Extracting WebGL info...');
+            try {
+                const webglTimeout = setTimeout(() => {
+                    debugLog('ERROR: WebGL info extraction timeout after 10 seconds');
+                }, 10000);
+                
+                const webglInfo = await Promise.race([
+                    page.evaluate(() => window.extractWebGLInfo()),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('WebGL info extraction timed out')), 
+                        8000)
+                    )
+                ]);
+                
+                clearTimeout(webglTimeout);
+                debugLog('WebGL Info:', JSON.stringify(webglInfo, null, 2));
+                
+                if (webglInfo.supported) {
+                    debugLog('WebGL is supported! Using GPU rendering');
+                } else {
+                    debugLog('WebGL not supported. Game may not render correctly:', webglInfo.reason);
+                }
+            } catch (webglError) {
+                debugLog('ERROR: WebGL info extraction failed:', webglError);
+                debugLog('Continuing despite WebGL extraction failure');
+            }
         } catch (loadError) {
+            clearTimeout(safetyTimeout);
             debugLog('ERROR: Page load failed', loadError);
             
-            // Try to proceed anyway - sometimes the page loads enough for a screenshot
-            // even if not all resources finished loading
-            debugLog('Attempting to continue despite load error');
+            // Try a different approach with simpler loading options
+            debugLog('Attempting simplified page load...');
+            try {
+                await page.goto(fileUrl, { 
+                    waitUntil: 'domcontentloaded',
+                    timeout: 10000
+                });
+                debugLog('Simplified page load completed');
+            } catch (retryError) {
+                debugLog('Simplified load also failed:', retryError);
+            }
         }
         
         // Log DOM content
-        const pageContent = await page.content();
-        debugLog('Page HTML length:', pageContent.length);
         if (DEBUG) {
+            const pageContent = await page.content();
+            debugLog('Page HTML length:', pageContent.length);
             fs.writeFileSync(\`\${outputDir}/debug-page-content.html\`, pageContent);
             debugLog('Saved page content to debug-page-content.html');
         }
         
-        // Wait a bit longer for rendering using setTimeout instead of waitForTimeout
+        // Wait a bit longer for rendering
         debugLog('Waiting 5 seconds for game to render');
         await sleep(5000);
-
-        // Take screenshot
-        const thumbPath = path.join(outputDir, \`thumbnail.png\`);
+        
+        // Skip interaction/clicking and just take the screenshot
+        debugLog('Taking screenshot of initial game state without interaction');
+        
+        // Take screenshot with timeout
+        const thumbPath = path.join(outputDir, \`raw-screenshot.png\`);
         debugLog(\`Attempting to capture screenshot to \${thumbPath}\`);
-        await page.screenshot({ 
-            path: thumbPath,
-            fullPage: false,
-            omitBackground: false
-        });
-        debugLog('Screenshot captured successfully');
-
-        // Verify screenshot exists and has content
-        if (fs.existsSync(thumbPath)) {
-            const stats = fs.statSync(thumbPath);
-            debugLog(\`Screenshot file size: \${stats.size} bytes\`);
+        
+        try {
+            const screenshotTimeout = setTimeout(() => {
+                debugLog('ERROR: Screenshot timeout triggered after 15 seconds');
+            }, 15000);
             
-            if (stats.size < 100) {
-                debugLog('WARNING: Screenshot file is very small, might be empty');
+            await page.screenshot({ 
+                path: thumbPath,
+                fullPage: false,
+                omitBackground: false,
+                timeout: 10000
+            });
+            
+            clearTimeout(screenshotTimeout);
+            debugLog('Screenshot captured successfully');
+            
+            // Verify screenshot exists and has content
+            if (fs.existsSync(thumbPath)) {
+                const stats = fs.statSync(thumbPath);
+                debugLog(\`Screenshot file size: \${stats.size} bytes\`);
+                
+                if (stats.size < 100) {
+                    debugLog('WARNING: Screenshot file is very small, might be empty');
+                }
+            } else {
+                throw new Error('Screenshot file was not created');
             }
-        } else {
-            throw new Error('Screenshot file was not created');
-        }
 
-        // Resize to thumbnail
-        debugLog('Resizing screenshot to thumbnail size');
-        await sharp(thumbPath)
-            .resize(width, height)
-            .toFile(path.join(outputDir, \`thumbnail-\${width}x\${height}.png\`));
+            // Resize to thumbnail using different filenames for input and output
+            debugLog('Resizing screenshot to thumbnail size');
+            await sharp(thumbPath)
+                .resize(width, height)
+                .toFile(path.join(outputDir, \`thumbnail-\${width}x\${height}.png\`));
             
-        console.log(\`Generated thumbnail for \${gameDir}\`);
+            // Create standard thumbnail.png from the raw screenshot
+            await sharp(thumbPath)
+                .resize(width, height)
+                .toFile(path.join(outputDir, \`thumbnail.png\`));
+                
+            console.log(\`Generated thumbnail for \${gameDir}\`);
+        } catch (screenshotError) {
+            debugLog('ERROR: Screenshot capture failed:', screenshotError);
+        }
     } catch (error) {
         console.error(\`Error generating thumbnail for \${gameDir}:\`, error);
         debugLog('ERROR: Stack trace:', error.stack);
@@ -183,13 +289,15 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
         try {
             const errorThumbPath = path.join(outputDir, \`error-thumbnail.png\`);
             debugLog('Attempting to save error screenshot');
-            const page = (await browser.pages())[0];
+            const page = await browser.newPage();
+            await page.goto(fileUrl, { timeout: 5000 }).catch(() => {});
             await page.screenshot({ path: errorThumbPath });
             debugLog(\`Saved error screenshot to \${errorThumbPath}\`);
         } catch (screenshotError) {
             debugLog('Failed to save error screenshot:', screenshotError);
         }
     } finally {
+        clearTimeout(globalTimeout);
         debugLog('Closing browser');
         await browser.close();
         debugLog('Browser closed');
@@ -200,6 +308,10 @@ async function main() {
     const gamesDir = process.argv[2] || '.';
     const width = parseInt(process.argv[3]) || 200;
     const height = parseInt(process.argv[4]) || 150;
+    
+    // Verify GPU and environment
+    debugLog('DISPLAY environment variable:', process.env.DISPLAY || '(not set)');
+    debugLog('Puppeteer executable path:', process.env.PUPPETEER_EXECUTABLE_PATH || '(default)');
     
     // Log environment info
     debugLog('Node version:', process.version);
@@ -222,7 +334,7 @@ async function main() {
 
     console.log(\`Found \${gameDirs.length} potential game directories\`);
     
-    // Process each game directory
+    // Process each game directory with a timeout
     for (const dir of gameDirs) {
         const gamePath = path.join(gamesDir, dir);
         const outputDir = gamePath; // Save thumbnail in the game's directory
@@ -237,13 +349,10 @@ async function main() {
         } catch (dirError) {
             debugLog('ERROR processing directory:', dirError);
         }
+        
+        // Add a small delay between games to let GPU resources recover
+        await sleep(1000);
     }
-    
-    // Note about alternatives
-    console.log('Note: If Puppeteer continues to fail, consider alternatives:');
-    console.log('1. Try node.js instead of bun (may have better compatibility)');
-    console.log('2. Consider Playwright as an alternative to Puppeteer');
-    console.log('3. For simpler games, html2canvas might be sufficient');
 }
 
 main().catch(err => {
@@ -256,36 +365,10 @@ EOF
 echo "Generating thumbnails..."
 DEBUG=true PUPPETEER_TIMEOUT=$PUPPETEER_TIMEOUT bun generate-thumbnails.js "$GAMES_DIR" "$WIDTH" "$HEIGHT"
 
-# Copy thumbnails to web directories
-echo "Copying thumbnails to web directories..."
-for GAME_DIR in "$GAMES_DIR"/*; do
-    if [ -d "$GAME_DIR" ]; then
-        GAME_NAME=$(basename "$GAME_DIR")
-        
-        # Copy thumbnails if they exist
-        if [ -f "$GAME_DIR/thumbnail-${WIDTH}x${HEIGHT}.png" ]; then
-            mkdir -p "$WEB_DIR/$GAME_NAME"
-            cp "$GAME_DIR/thumbnail-${WIDTH}x${HEIGHT}.png" "$WEB_DIR/$GAME_NAME/thumbnail.png"
-            echo "Added thumbnail for $GAME_NAME"
-        fi
-        
-        # Also try the error thumbnail if it exists
-        if [ ! -f "$WEB_DIR/$GAME_NAME/thumbnail.png" ] && [ -f "$GAME_DIR/error-thumbnail.png" ]; then
-            mkdir -p "$WEB_DIR/$GAME_NAME"
-            cp "$GAME_DIR/error-thumbnail.png" "$WEB_DIR/$GAME_NAME/thumbnail.png"
-            echo "Added error thumbnail for $GAME_NAME (better than nothing)"
-        fi
-    fi
-done
+# No need to copy thumbnails since we're using directory symlinks
+echo "Thumbnail generation complete! Thumbnails will be available automatically through symlinks."
 
 # Clean up
 rm -rf "$TEMP_DIR"
 
-echo "Thumbnail generation complete!"
-
-# TODO: Future Zig-based implementation
-# The future Zig implementation would:
-# 1. Use Wasmtime or Wasmer via Zig bindings to execute WASM
-# 2. Capture rendering output using a WebGL or Canvas simulation
-# 3. Use zigimg for image processing and resizing
-# 4. Integrate directly with the Zig build system 
+echo "Thumbnail generation complete!" 
