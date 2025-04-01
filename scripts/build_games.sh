@@ -27,36 +27,11 @@ generate_game_html() {
     local game_tags=$3
     
     # Create game directory if it doesn't exist
-    mkdir -p "$WEB_DIR/$game_name"
+    mkdir -p "$GAME_PATH"
     
-    # Generate game.html
-    cat > "$WEB_DIR/$game_name/index.html" << EOF
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${game_name}</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <header>
-        <nav>
-            <a href="/">Home</a>
-            <a href="/${game_name}/info">Info</a>
-        </nav>
-    </header>
-    <main class="game-container">
-        <div id="game"></div>
-    </main>
-    <script src="/${game_name}/main.js"></script>
-</body>
-</html>
-EOF
-
-    # Generate info.html
-    mkdir -p "$WEB_DIR/$game_name/info"
-    cat > "$WEB_DIR/$game_name/info/index.html" << EOF
+    # Only generate info.html, not index.html (to preserve game's original index.html)
+    mkdir -p "$GAME_PATH/info"
+    cat > "$GAME_PATH/info/index.html" << EOF
 <!DOCTYPE html>
 <html lang="en">
 <head>
