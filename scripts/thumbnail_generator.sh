@@ -56,6 +56,11 @@ function debugLog(...args) {
   }
 }
 
+// Helper function for timeout (since waitForTimeout isn't available in Bun)
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) {
     console.log(\`Processing \${gameDir}...\`);
     
@@ -84,7 +89,9 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
           '--disable-features=IsolateOrigins,site-per-process',
           '--no-zygote',
           '--no-first-run',
-          '--window-size=1280,720'
+          '--window-size=1280,720',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gl-drawing-for-tests'
         ],
         protocolTimeout: PUPPETEER_TIMEOUT,
         dumpio: DEBUG // Log browser process stdout/stderr
@@ -135,9 +142,9 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
             debugLog('Saved page content to debug-page-content.html');
         }
         
-        // Wait a bit longer for rendering
+        // Wait a bit longer for rendering using setTimeout instead of waitForTimeout
         debugLog('Waiting 5 seconds for game to render');
-        await page.waitForTimeout(5000);
+        await sleep(5000);
 
         // Take screenshot
         const thumbPath = path.join(outputDir, \`thumbnail.png\`);
