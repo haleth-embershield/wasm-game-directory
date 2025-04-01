@@ -316,9 +316,11 @@ jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
 done
 
 # Generate thumbnails for all games
-echo "Generating thumbnails for games..."
+echo "Starting thumbnail generation in background..."
 if [ -f "/scripts/thumbnail_generator.sh" ]; then
-    /scripts/thumbnail_generator.sh "$GAMES_DIR" "$WEB_DIR" "200x150"
+    # Run thumbnail generator in background
+    /scripts/thumbnail_generator.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
+    echo "Thumbnail generation running in background with PID $!"
 else
     echo "Warning: thumbnail_generator.sh not found. Skipping thumbnail generation."
 fi

@@ -16,7 +16,7 @@ echo "Setting rebuild frequency to every ${REBUILD_FREQUENCY} hours"
 # Set up cron job with dynamic frequency
 echo "0 */${REBUILD_FREQUENCY} * * * /scripts/build_games.sh /config/games.json" > /etc/crontabs/root
 
-# Run the build script initially
+# Run the build script initially (builds games, generates HTML, starts thumbnail generation in background)
 echo "Running initial build..."
 /scripts/build_games.sh /config/games.json
 
@@ -24,6 +24,6 @@ echo "Running initial build..."
 echo "Starting cron service..."
 crond
 
-# Start nginx in foreground
+# Start nginx in foreground (thumbnails will continue generating in background)
 echo "Starting nginx..."
 nginx -g "daemon off;" 
