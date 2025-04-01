@@ -1,0 +1,7 @@
+- Bash vs Go (ive never used Go and I feel like this would be an easy first project and can learn go routines to build multiple repos at a time)
+- games.json (game name, github link, description (from repo maybe?), tags)
+- (using zig latest, since all games will be zig - WASM freestanding targets (or should we use emscripten?)) pull each git repo to a /tmp directory, build (build should default to a /dist directory), copy the game's /dist directory from /tmp/$repo to a location for the actual website server (lightweight nginx image) probably in a /public/$game_name or /dist/$game_name directory, create and save a hash for the directory NOT in /tmp, clean up /tmp
+- check hash of each repo x often to see if we need to rebuild the game
+- games.mydomain.com/$game_name <-- game to play (no other buttons)
+- games.mydomain.com/$game_name/info <-- info about game, and tools used to build it, tags, would be cool to autogenerate a "how to play" with gifs of different stages of the game
+- games.mydomain.com/ <-- home with grid of games like miniclip (click on thumbnail to play, info link to go to info page for the game)

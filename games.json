@@ -1,0 +1,18 @@
+[
+  {
+    "name": "tower-def-geometry",
+    "repo_url": "https://github.com/haleth-embershield/tower-def-geometry",
+    "description": "A fun tower defense game with geometry",
+    "tags": ["td", "geometry", "fun"],
+    "thumbnail": "thumbnail.png",
+    "build_command": "zig build deploy"
+  },
+  {
+    "name": "ascii-flappy",
+    "repo_url": "https://github.com/haleth-embershield/ascii-flappy",
+    "description": "A fun flappy bird clone with ascii art",
+    "tags": ["flappy", "ascii", "fun"],
+    "thumbnail": "thumbnail.png",
+    "build_command": "zig build deploy"
+  }
+]

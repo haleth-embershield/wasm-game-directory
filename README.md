@@ -1,14 +1,24 @@
 # wasm-game-directory
- 
-leaning towards grok suggestion. want to keep this one container probably
+
+A static site to host multiple WASM games built with Zig, with a simple build and deployment pipeline.
+
+## Core Design
+- Single container with Zig and Nginx
+- Bash scripts for initial implementation, with Go/Zig versions planned for comparison
+- Static HTML/CSS/JS with no server-side interactivity
+- Each game is a separate Zig project targeting WASM freestanding
 
 TODO:
-- start simple
-- each game has its own index.html and .wasm files + assets
+- Build Bash script to pull, build, and deploy Zig WASM games
+- Implement game grid homepage with thumbnails
+- Create minimal templates for game pages and info pages
 
 LATER:
-- lets index.html per game inherit higher level stuff like header, footer, style etc
-- create a wasm-template.html that nginx uses to actually serve the .wasm files (each project would no longer need its own index.html and we would bundle all assets in .wasm)
+- Reimplement build system in Go/Zig for performance comparison
+- Use templates to provide consistent navigation and styling
+- Implement tag-based filtering on the homepage
+- Add game previews on hover using minimal JavaScript
 
 LATERER:
-- move to htmx and see if we like it better to get additional features (serve the .js dont use CDN)
+- Consider HTMX for enhanced client-side features without full frameworks
+- Automate thumbnail/preview generation

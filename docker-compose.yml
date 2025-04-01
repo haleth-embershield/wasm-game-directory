@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  wasm-games:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wasm-game-directory
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      # Persistent storage for built games
+      - games_data:/games
+      # Persistent storage for hash files
+      - hash_data:/hashes
+      # Mount games.json for easy configuration
+      - ./games.json:/config/games.json
+      # Optional: mount custom scripts without rebuilding
+      # - ./scripts:/scripts
+    environment:
+      - TZ=UTC
+      # Optional: set rebuild frequency (in hours)
+      - REBUILD_FREQUENCY=6
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+
+volumes:
+  games_data:
+    name: wasm_games_data
+  hash_data:
+    name: wasm_hash_data 
