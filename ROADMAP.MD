@@ -29,7 +29,21 @@
 - No database required - all data stored in static files
 - Game state handled client-side by individual games if needed
 
-## 3. Bash Implementation (Phase 1)
+## 3. Dependency Management
+- Current approach: Include common dependencies (Zig, Bun) in the container
+- Future options to explore:
+  1. **Extended games.json**:
+      ```json
+      {
+        "name": "game-name",
+        "repo_url": "...",
+        "dependencies": ["bun", "rust", "ffmpeg"]
+      }
+      ```
+  2. **Self-contained repos**: Games manage their own dependencies
+  3. **Standardized build template**: All games follow the same pattern
+
+## 4. Bash Implementation (Phase 1)
 - Create a Bash script to handle:
   - Parsing `games.json` with jq
   - Cloning/pulling game repositories
@@ -38,7 +52,7 @@
   - Tracking build hashes to detect changes
 - Run via cron for periodic builds
 
-## 4. Build Process
+## 5. Build Process
 1. Read `games.json` for game metadata
 2. For each game:
    - Clone repo to temp directory
@@ -51,14 +65,14 @@
    - Clean up temp files
 3. Generate homepage with game grid
 
-## 5. Go/Zig Implementation (Phase 2)
+## 6. Go/Zig Implementation (Phase 2)
 - Reimplement the build system in Go/Zig for comparison:
   - Concurrent builds with goroutines/threads
   - Better error handling
   - More sophisticated templating
   - Performance benchmarking against Bash version
 
-## 6. Web Structure
+## 7. Web Structure
 - Static site with simple URL scheme:
   - `games.mydomain.com/` - Homepage with game grid
   - `games.mydomain.com/{game-name}/` - Game page
@@ -69,7 +83,7 @@
   - `info.html` - Template for game info pages
   - `home.html` - Template for homepage grid
 
-## 7. Frontend Features (All Static)
+## 8. Frontend Features (All Static)
 - Homepage grid with game thumbnails
 - Game cards with name, thumbnail, and description
 - Tag-based filtering using client-side JavaScript
@@ -77,7 +91,7 @@
 - Simple navigation between games
 - No server-side processing required
 
-## 8. Deployment
+## 9. Deployment
 - Single Docker container with:
   - Zig for building
   - Bash/Go/Zig scripts for automation

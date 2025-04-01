@@ -18,6 +18,7 @@ if ! command -v jq &> /dev/null; then
 fi
 
 echo "Starting game build process using config: $CONFIG_FILE"
+echo "Build environment includes: Zig, Bun, Node.js, npm"
 
 # Function to generate simple HTML for a game
 generate_game_html() {
@@ -270,7 +271,7 @@ jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
         echo "Changes detected. Building $GAME_NAME..."
         
         # Pull latest code and build
-        git pull origin main
+        git pull origin
         eval "$BUILD_CMD"
         
         # Copy build artifacts to game directory

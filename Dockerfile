@@ -9,11 +9,18 @@ RUN apk add --no-cache \
     jq \
     xz \
     busybox-suid \
-    wget
+    wget \
+    nodejs \
+    npm \
+    unzip
 
 # Install Zig (latest version)
 RUN curl -L https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz | tar -xJ -C /usr/local
 ENV PATH="/usr/local/zig-linux-x86_64-0.14.0:${PATH}"
+
+# Install Bun
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
 
 # Create necessary directories
 RUN mkdir -p /games /hashes /config /scripts
