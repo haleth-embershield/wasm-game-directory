@@ -3,6 +3,12 @@ set -e
 
 echo "Starting WASM Game Directory Container"
 
+# Start Xvfb for headless browser with WebGL support
+echo "Starting Xvfb virtual display..."
+Xvfb :99 -screen 0 1280x720x24 -ac &
+sleep 1
+echo "Xvfb started with DISPLAY=:99"
+
 # Get rebuild frequency from environment variable (default to 6 hours)
 REBUILD_FREQUENCY=${REBUILD_FREQUENCY:-6}
 echo "Setting rebuild frequency to every ${REBUILD_FREQUENCY} hours"

@@ -20,8 +20,10 @@ services:
       - TZ=UTC
       # Optional: set rebuild frequency (in hours)
       - REBUILD_FREQUENCY=6
-      # Increase Puppeteer protocol timeout (in milliseconds)
-      - PUPPETEER_TIMEOUT=60000
+      # Playwright and SwiftShader settings
+      - PLAYWRIGHT_TIMEOUT=60000
+      - SWIFTSHADER_DISABLE_PERFETTO=1
+      - DISPLAY=:99
       - DEBUG=true
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost"]

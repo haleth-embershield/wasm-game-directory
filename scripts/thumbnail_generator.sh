@@ -2,18 +2,25 @@
 set -e
 
 # Thumbnail Generator for WASM Game Directory
-# Uses Bun + Puppeteer to generate thumbnails from game screens
+# Uses Bun + Playwright to generate thumbnails from game screens with WebGL support
 # TODO: Future version will use Zig natively
 
 GAMES_DIR=${1:-"/games"}
 WEB_DIR=${2:-"/usr/share/nginx/html"}
 THUMB_SIZE=${3:-"200x150"}
-PUPPETEER_TIMEOUT=${PUPPETEER_TIMEOUT:-60000}
+PLAYWRIGHT_TIMEOUT=${PLAYWRIGHT_TIMEOUT:-60000}
 DEBUG=${DEBUG:-"false"}
 
 echo "Starting thumbnail generation for games in $GAMES_DIR"
-echo "Using Puppeteer timeout of $PUPPETEER_TIMEOUT ms"
+echo "Using Playwright timeout of $PLAYWRIGHT_TIMEOUT ms"
 echo "Debug mode: $DEBUG"
+
+# Make sure Xvfb is running
+if ! pgrep Xvfb > /dev/null; then
+  echo "Starting Xvfb virtual display..."
+  Xvfb :99 -screen 0 1280x720x24 -ac &
+  sleep 2
+fi
 
 # Extract width and height from THUMB_SIZE
 WIDTH=$(echo $THUMB_SIZE | cut -d'x' -f1)
@@ -31,22 +38,22 @@ df -h | grep -E '/$|/tmp' || echo "df command failed"
 # Initialize Bun project and install dependencies
 echo "Installing dependencies..."
 bun init -y
-bun add puppeteer sharp
+bun add playwright-chromium sharp
 
-# Enable Puppeteer debugging if needed
+# Enable debugging if needed
 if [ "$DEBUG" = "true" ]; then
-  export DEBUG="puppeteer:*"
+  export DEBUG="playwright:*"
 fi
 
 # Create the thumbnail generation script
 cat > generate-thumbnails.js << EOF
-const puppeteer = require('puppeteer');
+const { chromium } = require('playwright-chromium');
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 
 // Use timeout from environment variable
-const PUPPETEER_TIMEOUT = parseInt(process.env.PUPPETEER_TIMEOUT || '60000');
+const PLAYWRIGHT_TIMEOUT = parseInt(process.env.PLAYWRIGHT_TIMEOUT || '60000');
 const DEBUG = process.env.DEBUG === 'true';
 
 // Helper function to log debug info
@@ -54,11 +61,6 @@ function debugLog(...args) {
   if (DEBUG || args[0] === 'ERROR') {
     console.log('[DEBUG]', ...args);
   }
-}
-
-// Helper function for timeout (since waitForTimeout isn't available in Bun)
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) {
@@ -71,80 +73,124 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
         return;
     }
     
-    debugLog('Launching browser with the following options:', {
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
-      protocolTimeout: PUPPETEER_TIMEOUT,
-      timeout: PUPPETEER_TIMEOUT
-    });
+    debugLog('Launching browser with SwiftShader WebGL support');
     
-    // Launch browser with increased timeout and more debug flags
-    const browser = await puppeteer.launch({ 
-        headless: 'new',
+    // Launch browser with SwiftShader for WebGL support
+    const browser = await chromium.launch({
+        executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
         args: [
-          '--no-sandbox', 
-          '--disable-setuid-sandbox',
-          '--disable-gpu',
-          '--disable-web-security',
-          '--disable-features=IsolateOrigins,site-per-process',
-          '--no-zygote',
-          '--no-first-run',
-          '--window-size=1280,720',
-          '--disable-accelerated-2d-canvas',
-          '--disable-gl-drawing-for-tests'
+            '--use-gl=angle',
+            '--use-angle=swiftshader',
+            '--ignore-gpu-blocklist',
+            '--enable-gpu-rasterization',
+            '--enable-oop-rasterization',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--window-size=1280,720',
+            '--disable-accelerated-video-decode',
+            '--disable-gpu-sandbox'
         ],
-        protocolTimeout: PUPPETEER_TIMEOUT,
-        dumpio: DEBUG // Log browser process stdout/stderr
+        headless: true,
+        timeout: PLAYWRIGHT_TIMEOUT
     });
     
     try {
         debugLog('Browser launched successfully');
-        const page = await browser.newPage();
-        
-        // Listen for console messages from the page
-        page.on('console', message => debugLog('CONSOLE:', message.type(), message.text()));
-        
-        // Listen for errors
-        page.on('error', err => debugLog('ERROR:', err.toString()));
-        page.on('pageerror', err => debugLog('PAGE ERROR:', err.toString()));
-        
-        // Listen for request failures
-        page.on('requestfailed', request => {
-          debugLog('REQUEST FAILED:', request.url(), 'with error', request.failure().errorText);
+        const context = await browser.newContext({
+            viewport: { width: 1280, height: 720 },
+            deviceScaleFactor: 1
         });
         
-        await page.setViewport({ width: 1280, height: 720 });
-        debugLog('Viewport set to 1280x720');
+        // Enable debug logs for browser console
+        if (DEBUG) {
+            context.on('console', msg => {
+                debugLog('CONSOLE:', msg.type(), msg.text());
+            });
+        }
+        
+        const page = await context.newPage();
+        
+        // Inject WebGL debug info extractor
+        await page.addInitScript(() => {
+            window.extractWebGLInfo = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (!gl) return { supported: false, reason: 'WebGL context creation failed' };
+                    
+                    return {
+                        supported: true,
+                        vendor: gl.getParameter(gl.VENDOR),
+                        renderer: gl.getParameter(gl.RENDERER),
+                        version: gl.getParameter(gl.VERSION),
+                        shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+                        extensions: gl.getSupportedExtensions()
+                    };
+                } catch (err) {
+                    return { supported: false, reason: err.toString() };
+                }
+            };
+        });
 
-        // Load the game with extra debug info
+        // Load the game
         const fileUrl = \`file://\${path.resolve(gamePath)}\`;
         debugLog(\`Attempting to load \${fileUrl}\`);
         
         try {
             await page.goto(fileUrl, { 
-                waitUntil: 'networkidle0',
-                timeout: PUPPETEER_TIMEOUT
+                waitUntil: 'networkidle',
+                timeout: PLAYWRIGHT_TIMEOUT
             });
             debugLog('Page loaded successfully');
+            
+            // Check if WebGL is available and log info
+            const webglInfo = await page.evaluate(() => window.extractWebGLInfo());
+            debugLog('WebGL Info:', JSON.stringify(webglInfo, null, 2));
+            
+            if (webglInfo.supported) {
+                debugLog('WebGL is supported! Using hardware/software rendering');
+            } else {
+                debugLog('WebGL not supported. Game may not render correctly:', webglInfo.reason);
+            }
+            
         } catch (loadError) {
             debugLog('ERROR: Page load failed', loadError);
-            
-            // Try to proceed anyway - sometimes the page loads enough for a screenshot
-            // even if not all resources finished loading
             debugLog('Attempting to continue despite load error');
         }
         
         // Log DOM content
-        const pageContent = await page.content();
-        debugLog('Page HTML length:', pageContent.length);
         if (DEBUG) {
+            const pageContent = await page.content();
+            debugLog('Page HTML length:', pageContent.length);
             fs.writeFileSync(\`\${outputDir}/debug-page-content.html\`, pageContent);
             debugLog('Saved page content to debug-page-content.html');
         }
         
-        // Wait a bit longer for rendering using setTimeout instead of waitForTimeout
+        // Wait a bit longer for rendering
         debugLog('Waiting 5 seconds for game to render');
-        await sleep(5000);
+        await page.waitForTimeout(5000);
+        
+        // Try to interact with the page to trigger game rendering if needed
+        try {
+            await page.evaluate(() => {
+                // Click in the middle of the screen to potentially start the game
+                const event = new MouseEvent('click', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: window.innerWidth / 2,
+                    clientY: window.innerHeight / 2
+                });
+                document.elementFromPoint(window.innerWidth/2, window.innerHeight/2)?.dispatchEvent(event);
+            });
+            debugLog('Triggered click event to start game');
+            
+            // Wait a bit more for the game to respond
+            await page.waitForTimeout(1000);
+        } catch (interactError) {
+            debugLog('Error during interaction:', interactError);
+        }
 
         // Take screenshot
         const thumbPath = path.join(outputDir, \`thumbnail.png\`);
@@ -183,7 +229,8 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
         try {
             const errorThumbPath = path.join(outputDir, \`error-thumbnail.png\`);
             debugLog('Attempting to save error screenshot');
-            const page = (await browser.pages())[0];
+            const page = await browser.newPage();
+            await page.goto(fileUrl, { timeout: 5000 }).catch(() => {});
             await page.screenshot({ path: errorThumbPath });
             debugLog(\`Saved error screenshot to \${errorThumbPath}\`);
         } catch (screenshotError) {
@@ -201,12 +248,16 @@ async function main() {
     const width = parseInt(process.argv[3]) || 200;
     const height = parseInt(process.argv[4]) || 150;
     
+    // Verify DISPLAY environment variable
+    debugLog('DISPLAY environment variable:', process.env.DISPLAY || '(not set)');
+    
     // Log environment info
     debugLog('Node version:', process.version);
     debugLog('Platform:', process.platform);
     debugLog('Architecture:', process.arch);
-    debugLog('Puppeteer version:', require('puppeteer/package.json').version);
-    debugLog('Puppeteer timeout:', PUPPETEER_TIMEOUT);
+    debugLog('Playwright version:', require('playwright-chromium/package.json').version);
+    debugLog('Chromium path:', process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '(default)');
+    debugLog('Timeout:', PLAYWRIGHT_TIMEOUT);
     
     // Check available memory
     try {
@@ -238,12 +289,6 @@ async function main() {
             debugLog('ERROR processing directory:', dirError);
         }
     }
-    
-    // Note about alternatives
-    console.log('Note: If Puppeteer continues to fail, consider alternatives:');
-    console.log('1. Try node.js instead of bun (may have better compatibility)');
-    console.log('2. Consider Playwright as an alternative to Puppeteer');
-    console.log('3. For simpler games, html2canvas might be sufficient');
 }
 
 main().catch(err => {
@@ -254,7 +299,7 @@ EOF
 
 # Run the script with our parameters and enable debugging
 echo "Generating thumbnails..."
-DEBUG=true PUPPETEER_TIMEOUT=$PUPPETEER_TIMEOUT bun generate-thumbnails.js "$GAMES_DIR" "$WIDTH" "$HEIGHT"
+DEBUG=true PLAYWRIGHT_TIMEOUT=$PLAYWRIGHT_TIMEOUT DISPLAY=:99 bun generate-thumbnails.js "$GAMES_DIR" "$WIDTH" "$HEIGHT"
 
 # Copy thumbnails to web directories
 echo "Copying thumbnails to web directories..."
