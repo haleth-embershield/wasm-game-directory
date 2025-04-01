@@ -289,6 +289,11 @@ async function generateThumbnail(gameDir, outputDir, width = 200, height = 150) 
             await sharp(thumbPath)
                 .resize(width, height)
                 .toFile(path.join(outputDir, \`thumbnail-\${width}x\${height}.png\`));
+            
+            // Also save as standard thumbnail.png for easier reference
+            await sharp(thumbPath)
+                .resize(width, height)
+                .toFile(path.join(outputDir, \`thumbnail.png\`));
                 
             console.log(\`Generated thumbnail for \${gameDir}\`);
         } catch (screenshotError) {
@@ -378,27 +383,8 @@ EOF
 echo "Generating thumbnails..."
 DEBUG=true PUPPETEER_TIMEOUT=$PUPPETEER_TIMEOUT bun generate-thumbnails.js "$GAMES_DIR" "$WIDTH" "$HEIGHT"
 
-# Copy thumbnails to web directories
-echo "Copying thumbnails to web directories..."
-for GAME_DIR in "$GAMES_DIR"/*; do
-    if [ -d "$GAME_DIR" ]; then
-        GAME_NAME=$(basename "$GAME_DIR")
-        
-        # Copy thumbnails if they exist
-        if [ -f "$GAME_DIR/thumbnail-${WIDTH}x${HEIGHT}.png" ]; then
-            mkdir -p "$WEB_DIR/$GAME_NAME"
-            cp "$GAME_DIR/thumbnail-${WIDTH}x${HEIGHT}.png" "$WEB_DIR/$GAME_NAME/thumbnail.png"
-            echo "Added thumbnail for $GAME_NAME"
-        fi
-        
-        # Also try the error thumbnail if it exists
-        if [ ! -f "$WEB_DIR/$GAME_NAME/thumbnail.png" ] && [ -f "$GAME_DIR/error-thumbnail.png" ]; then
-            mkdir -p "$WEB_DIR/$GAME_NAME"
-            cp "$GAME_DIR/error-thumbnail.png" "$WEB_DIR/$GAME_NAME/thumbnail.png"
-            echo "Added error thumbnail for $GAME_NAME (better than nothing)"
-        fi
-    fi
-done
+# No need to copy thumbnails since we're using directory symlinks
+echo "Thumbnail generation complete! Thumbnails will be available automatically through symlinks."
 
 # Clean up
 rm -rf "$TEMP_DIR"

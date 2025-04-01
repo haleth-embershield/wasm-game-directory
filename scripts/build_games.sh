@@ -277,9 +277,18 @@ jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
     
     # Link game assets to web directory
     echo "Linking game assets to web directory..."
-    mkdir -p "$WEB_DIR/$GAME_NAME"
-    rm -rf "$WEB_DIR/$GAME_NAME"/*
-    ln -sf "$GAME_PATH/"* "$WEB_DIR/$GAME_NAME/"
+    
+    # Create parent directory if it doesn't exist
+    mkdir -p "$WEB_DIR"
+    
+    # Remove existing symlink or directory
+    if [ -e "$WEB_DIR/$GAME_NAME" ]; then
+        rm -rf "$WEB_DIR/$GAME_NAME"
+    fi
+    
+    # Create a symlink of the entire directory instead of individual files
+    ln -sf "$GAME_PATH" "$WEB_DIR/$GAME_NAME"
+    echo "Created symlink from $GAME_PATH to $WEB_DIR/$GAME_NAME"
     
     # Clean up repo to save space
     cd /
