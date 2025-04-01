@@ -307,7 +307,8 @@ jq -c '.[]' "$CONFIG_FILE" | while read -r game; do
     # Link game assets to web directory
     echo "Linking game assets to web directory..."
     mkdir -p "$WEB_DIR/$GAME_NAME"
-    cp -r "$GAME_PATH/"* "$WEB_DIR/$GAME_NAME/"
+    rm -rf "$WEB_DIR/$GAME_NAME"/*
+    ln -sf "$GAME_PATH/"* "$WEB_DIR/$GAME_NAME/"
     
     # Clean up repo to save space
     cd /
