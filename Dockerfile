@@ -8,7 +8,7 @@ RUN apk add --no-cache \
     curl \
     jq \
     xz \
-    cron \
+    busybox-suid \
     wget
 
 # Install Zig (latest version)
