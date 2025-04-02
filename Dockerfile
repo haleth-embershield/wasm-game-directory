@@ -56,8 +56,9 @@ ENV PATH="/root/.bun/bin:${PATH}"
 RUN git clone https://github.com/emscripten-core/emsdk.git /opt/emsdk \
     && cd /opt/emsdk \
     && ./emsdk install latest \
-    && ./emsdk activate latest
-ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:${PATH}"
+    && ./emsdk activate latest \
+    && . /opt/emsdk/emsdk_env.sh
+ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:/opt/emsdk/node/current/bin:/opt/emsdk/upstream/bin:${PATH}"
 ENV EMSDK="/opt/emsdk"
 ENV EM_CONFIG="/opt/emsdk/.emscripten"
 ENV EMSDK_NODE="/usr/bin/node"
