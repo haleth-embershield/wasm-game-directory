@@ -86,14 +86,8 @@ EOF
         game_name=$(echo "$game" | jq -r '.name')
         game_desc=$(echo "$game" | jq -r '.description')
         
-        # Determine which thumbnail to use based on GENERATE_THUMBNAILS
-        if [ "$GENERATE_THUMBNAILS" = "true" ]; then
-            # Use raw screenshot when thumbnails are enabled
-            game_thumb="/$game_name/raw-screenshot.png"
-        else
-            # Use a default placeholder when thumbnails are disabled
-            game_thumb="/static/default-thumb.png"
-        fi
+        # Always use default placeholder image since thumbnail generation is disabled
+        game_thumb="/static/default-thumb.png"
         
         # Add game to grid
         cat >> "$WEB_DIR/index.html" << EOF
@@ -304,25 +298,26 @@ done
 
 # Generate thumbnails for all games (if enabled)
 GENERATE_THUMBNAILS=${GENERATE_THUMBNAILS:-false}
-if [ "$GENERATE_THUMBNAILS" = "true" ]; then
-    echo "Starting thumbnail generation in background..."
-    if [ -f "/scripts/thumbnail_generator.sh" ]; then
-        # Run thumbnail generator in background
-        /scripts/thumbnail_generator.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
-        echo "Thumbnail generation running in background with PID $!"
-    else
-        echo "Warning: thumbnail_generator.sh not found. Trying alternative generators..."
-        # Try puppeteer version as fallback
-        if [ -f "/scripts/thumbnail_generator_puppeteer.sh" ]; then
-            /scripts/thumbnail_generator_puppeteer.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
-            echo "Puppeteer thumbnail generation running in background with PID $!"
-        else
-            echo "Error: No thumbnail generator found. Thumbnails will not be generated."
-        fi
-    fi
-else
-    echo "Thumbnail generation disabled by GENERATE_THUMBNAILS=$GENERATE_THUMBNAILS"
-fi
+# if [ "$GENERATE_THUMBNAILS" = "true" ]; then
+#     echo "Starting thumbnail generation in background..."
+#     if [ -f "/scripts/thumbnail_generator.sh" ]; then
+#         # Run thumbnail generator in background
+#         /scripts/thumbnail_generator.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
+#         echo "Thumbnail generation running in background with PID $!"
+#     else
+#         echo "Warning: thumbnail_generator.sh not found. Trying alternative generators..."
+#         # Try puppeteer version as fallback
+#         if [ -f "/scripts/thumbnail_generator_puppeteer.sh" ]; then
+#             /scripts/thumbnail_generator_puppeteer.sh "$GAMES_DIR" "$WEB_DIR" "200x150" &
+#             echo "Puppeteer thumbnail generation running in background with PID $!"
+#         else
+#             echo "Error: No thumbnail generator found. Thumbnails will not be generated."
+#         fi
+#     fi
+# else
+#     echo "Thumbnail generation disabled by GENERATE_THUMBNAILS=$GENERATE_THUMBNAILS"
+# fi
+echo "Thumbnail generation disabled"
 
 # Generate the homepage
 generate_homepage

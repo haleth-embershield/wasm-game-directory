@@ -1,75 +1,62 @@
-# Single-stage build with Zig and Nginx
-FROM nginx:alpine
+FROM ubuntu:22.04
 
-# Install required tools
-RUN apk add --no-cache \
-    bash \
-    git \
+# Avoid interactive dialogs during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Set up environment variables
+ENV ZIG_VERSION=0.14.0
+ENV EMSDK_VERSION=3.1.48
+
+# Install essential tools and dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
     curl \
-    jq \
-    xz \
-    busybox-suid \
-    wget \
-    nodejs \
-    npm \
-    unzip \
-    # Emscripten dependencies
+    git \
     python3 \
+    python3-pip \
     cmake \
-    llvm \
-    clang \
-    lld \
-    # Dependencies for Puppeteer with GPU support
-    chromium \
-    mesa-dri-gallium \
-    mesa-gl \
-    mesa-egl \
-    mesa-gles \
-    mesa-vulkan-intel \
-    mesa-vulkan-layers \
-    ttf-freefont \
-    pango \
-    libstdc++ \
-    harfbuzz \
-    nss \
-    freetype \
-    freetype-dev \
-    dbus \
-    fontconfig \
-    xvfb \
-    eudev
+    ninja-build \
+    ca-certificates \
+    wget \
+    xz-utils \
+    unzip \
+    nginx \
+    cron \
+    jq \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Set Puppeteer environment variables
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
-    DISPLAY=:99
+# Install Node.js and npm for Emscripten and Bun
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g npm@latest
 
-# Install Zig (latest version)
-RUN curl -L https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz | tar -xJ -C /usr/local
-ENV PATH="/usr/local/zig-linux-x86_64-0.14.0:${PATH}"
+# Install Zig
+RUN wget https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz \
+    && tar -xf zig-linux-x86_64-${ZIG_VERSION}.tar.xz \
+    && mv zig-linux-x86_64-${ZIG_VERSION} /usr/local/zig \
+    && rm zig-linux-x86_64-${ZIG_VERSION}.tar.xz
+
+# Add Zig to PATH
+ENV PATH="/usr/local/zig:${PATH}"
+
+# Install Emscripten
+WORKDIR /opt
+RUN git clone https://github.com/emscripten-core/emsdk.git \
+    && cd emsdk \
+    && ./emsdk install ${EMSDK_VERSION} \
+    && ./emsdk activate ${EMSDK_VERSION}
+
+# Add Emscripten to PATH
+ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:/opt/emsdk/node/current/bin:/opt/emsdk/upstream/bin:${PATH}"
+ENV EMSDK="/opt/emsdk"
+ENV EM_CONFIG="/opt/emsdk/.emscripten"
 
 # Install Bun
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
-# Install Emscripten
-RUN git clone https://github.com/emscripten-core/emsdk.git /opt/emsdk \
-    && cd /opt/emsdk \
-    # Use a specific version that's known to work with Zig 0.14.0
-    && ./emsdk install 3.1.45 \
-    && ./emsdk activate 3.1.45 \
-    # Don't create symlinks to system tools - let Emscripten use its own tools
-    && chmod +x /opt/emsdk/emsdk_env.sh \
-    && . /opt/emsdk/emsdk_env.sh
-
-# Set environment variables for Emscripten
-ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:/opt/emsdk/node/current/bin:/opt/emsdk/upstream/bin:${PATH}"
-ENV EMSDK="/opt/emsdk"
-ENV EM_CONFIG="/opt/emsdk/.emscripten"
-# Verify emcc can run
-RUN . /opt/emsdk/emsdk_env.sh && emcc --version
-
-# Create necessary directories
+# Create necessary directories for our game system
 RUN mkdir -p /games /hashes /config /scripts
 
 # Copy configuration files
@@ -78,27 +65,11 @@ COPY web/ /usr/share/nginx/html/
 COPY games.json /config/games.json
 COPY scripts/ /scripts/
 
-# # Fix Xvfb display lock issue
-# RUN echo '#!/bin/bash\n\
-# # Remove any existing lock file for display 99\n\
-# if [ -f /tmp/.X99-lock ]; then\n\
-#     rm -f /tmp/.X99-lock\n\
-# fi\n\
-# Xvfb :99 -screen 0 1024x768x24 &\n\
-# export DISPLAY=:99\n\
-# # Start other services\n\
-# echo "Starting nginx..."\n\
-# nginx\n\
-# echo "WASM Game Directory is ready."\n\
-# echo "Container is now running. Press Ctrl+C to stop."\n\
-# # Keep container running\n\
-# tail -f /dev/null\n' > /scripts/entrypoint.sh
-
 # Make scripts executable
 RUN chmod +x /scripts/*.sh
 
-# Expose port
+# Expose port for Nginx
 EXPOSE 80
 
-# Entry script to start services
+# The entrypoint will be handled by your scripts
 ENTRYPOINT ["/scripts/entrypoint.sh"]
