@@ -59,7 +59,7 @@ COPY scripts/ /scripts/
 RUN chmod +x /scripts/*.sh
 
 # Expose port
-EXPOSE 80
+EXPOSE 8081
 
 # Entry script to start services
 ENTRYPOINT ["/scripts/entrypoint.sh"]
