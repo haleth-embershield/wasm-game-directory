@@ -50,11 +50,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Enable WebAssembly bulk memory operations
-RUN echo "EMSCRIPTEN_FEATURES=['-mbulk-memory']" >> /opt/emsdk/upstream/emscripten/em_config.py
+# RUN echo "EMSCRIPTEN_FEATURES=['-mbulk-memory']" >> /opt/emsdk/upstream/emscripten/em_config.py
 
 # Set environment variables to support bulk memory operations in wasm
-ENV CFLAGS="-mbulk-memory"
-ENV LDFLAGS="-mbulk-memory"
+# ENV CFLAGS="-mbulk-memory"
+# ENV LDFLAGS="-mbulk-memory"
 
 # Install Bun
 RUN curl -fsSL https://bun.sh/install | bash
