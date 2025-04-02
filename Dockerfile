@@ -64,8 +64,9 @@ ENV PATH="/root/.bun/bin:${PATH}"
 RUN mkdir -p /games /hashes /config /scripts
 
 # Copy configuration files
-COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
-COPY web/ /usr/share/nginx/html/
+COPY nginx/nginx.conf /etc/nginx/sites-available/default
+RUN rm -f /etc/nginx/sites-enabled/default && ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/
+COPY web/ /var/www/html/
 COPY games.json /config/games.json
 COPY scripts/ /scripts/
 

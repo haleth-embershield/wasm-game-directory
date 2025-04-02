@@ -6,7 +6,7 @@ CONFIG_FILE=${1:-"/config/games.json"}
 REPO_DIR="/tmp/repos"
 GAMES_DIR="/games"
 HASH_DIR="/hashes"
-WEB_DIR="/usr/share/nginx/html"
+WEB_DIR="/var/www/html"
 
 # Create directories if they don't exist
 mkdir -p "$REPO_DIR" "$GAMES_DIR" "$HASH_DIR"
