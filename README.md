@@ -1,4 +1,4 @@
-# wasm-game-directory
+# wasm-game-directory fr
 
 A static site to host multiple WASM games built with Zig, with a simple build and deployment pipeline.
 
