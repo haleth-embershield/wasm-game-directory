@@ -1,9 +1,33 @@
 [
   {
     "name": "ascii-flappy",
-    "repo_url": "https://github.com/haleth-embershield/ascii-flappy",
+    "repo_url": "https://github.com/haleth-embershield/hgames-flappy-ascii",
     "description": "A fun flappy bird clone with ascii art",
     "tags": ["flappy", "ascii", "fun"],
+    "thumbnail": "thumbnail.png",
+    "build_command": "zig build deploy"
+  },
+  {
+    "name": "hill-climber",
+    "repo_url": "https://github.com/haleth-embershield/hgames-hill-climber",
+    "description": "A fun hill climber game",
+    "tags": ["hill", "climber", "fun"],
+    "thumbnail": "thumbnail.png",
+    "build_command": "zig build deploy"
+  },
+  {
+    "name": "tower-def-1",
+    "repo_url": "https://github.com/haleth-embershield/hgames-tower-def-1",
+    "description": "A fun tower defense game",
+    "tags": ["tower", "def", "fun"],
+    "thumbnail": "thumbnail.png",
+    "build_command": "zig build deploy"
+  },
+  {
+    "name": "tower-def-2",
+    "repo_url": "https://github.com/haleth-embershield/hgames-tower-def-2",
+    "description": "A fun tower defense game",
+    "tags": ["tower", "def", "fun"],
     "thumbnail": "thumbnail.png",
     "build_command": "zig build deploy"
   }
