@@ -55,25 +55,19 @@ ENV PATH="/root/.bun/bin:${PATH}"
 # Install Emscripten
 RUN git clone https://github.com/emscripten-core/emsdk.git /opt/emsdk \
     && cd /opt/emsdk \
+    # Use a specific version that's known to work with Zig 0.14.0
     && ./emsdk install 3.1.45 \
     && ./emsdk activate 3.1.45 \
-    && . /opt/emsdk/emsdk_env.sh \
-    # Verify installation paths exist
-    && ls -la /opt/emsdk/upstream/bin/ \
-    && ls -la /opt/emsdk/node/ \
-    # Create symlinks if needed
-    && mkdir -p /opt/emsdk/upstream/bin \
-    && ln -sf /usr/bin/clang /opt/emsdk/upstream/bin/clang \
-    && ln -sf /usr/bin/llvm-ar /opt/emsdk/upstream/bin/llvm-ar \
-    && mkdir -p /opt/emsdk/node/20.18.0_64bit/bin/ \
-    && ln -sf /usr/bin/node /opt/emsdk/node/20.18.0_64bit/bin/node
+    # Don't create symlinks to system tools - let Emscripten use its own tools
+    && chmod +x /opt/emsdk/emsdk_env.sh \
+    && . /opt/emsdk/emsdk_env.sh
 
 # Set environment variables for Emscripten
-ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:/opt/emsdk/node/20.18.0_64bit/bin:/opt/emsdk/upstream/bin:${PATH}"
+ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:/opt/emsdk/node/current/bin:/opt/emsdk/upstream/bin:${PATH}"
 ENV EMSDK="/opt/emsdk"
 ENV EM_CONFIG="/opt/emsdk/.emscripten"
 # Verify emcc can run
-RUN emcc --version
+RUN . /opt/emsdk/emsdk_env.sh && emcc --version
 
 # Create necessary directories
 RUN mkdir -p /games /hashes /config /scripts
@@ -83,6 +77,22 @@ COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
 COPY web/ /usr/share/nginx/html/
 COPY games.json /config/games.json
 COPY scripts/ /scripts/
+
+# Fix Xvfb display lock issue
+RUN echo '#!/bin/bash\n\
+# Remove any existing lock file for display 99\n\
+if [ -f /tmp/.X99-lock ]; then\n\
+    rm -f /tmp/.X99-lock\n\
+fi\n\
+Xvfb :99 -screen 0 1024x768x24 &\n\
+export DISPLAY=:99\n\
+# Start other services\n\
+echo "Starting nginx..."\n\
+nginx\n\
+echo "WASM Game Directory is ready."\n\
+echo "Container is now running. Press Ctrl+C to stop."\n\
+# Keep container running\n\
+tail -f /dev/null\n' > /scripts/entrypoint.sh
 
 # Make scripts executable
 RUN chmod +x /scripts/*.sh
