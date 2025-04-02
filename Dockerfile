@@ -20,29 +20,29 @@ RUN apk add --no-cache \
     clang \
     lld \
     # Dependencies for Puppeteer with GPU support
-    # chromium \
-    # mesa-dri-gallium \
-    # mesa-gl \
-    # mesa-egl \
-    # mesa-gles \
-    # mesa-vulkan-intel \
-    # mesa-vulkan-layers \
-    # ttf-freefont \
-    # pango \
-    # libstdc++ \
-    # harfbuzz \
-    # nss \
-    # freetype \
-    # freetype-dev \
-    # dbus \
-    # fontconfig \
-    # xvfb \
-    # eudev
+    chromium \
+    mesa-dri-gallium \
+    mesa-gl \
+    mesa-egl \
+    mesa-gles \
+    mesa-vulkan-intel \
+    mesa-vulkan-layers \
+    ttf-freefont \
+    pango \
+    libstdc++ \
+    harfbuzz \
+    nss \
+    freetype \
+    freetype-dev \
+    dbus \
+    fontconfig \
+    xvfb \
+    eudev
 
 # Set Puppeteer environment variables
-# ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-#     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
-#     DISPLAY=:99
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    DISPLAY=:99
 
 # Install Zig (latest version)
 RUN curl -L https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz | tar -xJ -C /usr/local
