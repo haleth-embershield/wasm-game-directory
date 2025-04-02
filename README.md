@@ -51,6 +51,7 @@ Possible solutions to consider:
 This will be addressed in upcoming optimizations to improve deployment efficiency.
 
 TODO:
+- the hashes dont seem to save between build (volumes created but not seen?) so we need to test the hash creation so we are not rebuilding every time
 - Implement tag-based filtering on the homepage
 - Add game previews on hover using minimal JavaScript
 - Develop a solution to inject consistent header/footer elements into game HTML files without replacing them
