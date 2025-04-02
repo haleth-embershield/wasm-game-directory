@@ -38,7 +38,7 @@ services:
       - SYS_ADMIN
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost"]
-      interval: 5m
+      interval: 1m
       timeout: 10s
       retries: 3
 

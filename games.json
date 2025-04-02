@@ -30,5 +30,13 @@
     "tags": ["tower", "def", "fun"],
     "thumbnail": "thumbnail.png",
     "build_command": "zig build deploy"
+  },
+  {
+    "name": "Pacman-Emulator",
+    "repo_url": "https://github.com/haleth-embershield/hgames-pacman.zig",
+    "description": "Pacman Emulator from floooh",
+    "tags": ["pacman", "emulator", "fun"],
+    "thumbnail": "thumbnail.png",
+    "build_command": "zig build deploy"
   }
 ]

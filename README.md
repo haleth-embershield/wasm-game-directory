@@ -28,7 +28,30 @@ The system automatically generates thumbnails for each game by:
 3. Resizing to a standard thumbnail size (200x150px by default)
 4. Including these thumbnails in the game directory homepage
 
+## Container Size Concerns
+The current Docker container has grown significantly in size due to the inclusion of:
+- Thumbnail generation dependencies (Chromium, Mesa, etc.)
+- Multiple build systems (Zig, Bun, Emscripten)
+- Various development tools
+
+Possible solutions to consider:
+1. **Split into multiple containers**:
+   - Main container for game serving (Nginx + minimal dependencies)
+   - Build container for game compilation (Zig, Emscripten)
+   - Utility container for thumbnail generation (Puppeteer, Chromium)
+
+2. **Feature flags during build**:
+   - Allow building container with/without thumbnail generation
+   - Provide option to exclude certain build tools if not needed
+
+3. **External thumbnail generation**:
+   - Move thumbnail generation to CI/CD pipeline
+   - Pre-generate thumbnails before deployment
+
+This will be addressed in upcoming optimizations to improve deployment efficiency.
+
 TODO:
+- the hashes dont seem to save between build (volumes created but not seen?) so we need to test the hash creation so we are not rebuilding every time
 - Implement tag-based filtering on the homepage
 - Add game previews on hover using minimal JavaScript
 - Develop a solution to inject consistent header/footer elements into game HTML files without replacing them
