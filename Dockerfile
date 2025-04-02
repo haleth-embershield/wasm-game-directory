@@ -13,6 +13,12 @@ RUN apk add --no-cache \
     nodejs \
     npm \
     unzip \
+    # Emscripten dependencies
+    python3 \
+    cmake \
+    llvm \
+    clang \
+    lld \
     # Dependencies for Puppeteer with GPU support
     chromium \
     mesa-dri-gallium \
@@ -45,6 +51,16 @@ ENV PATH="/usr/local/zig-linux-x86_64-0.14.0:${PATH}"
 # Install Bun
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
+
+# Install Emscripten
+RUN git clone https://github.com/emscripten-core/emsdk.git /opt/emsdk \
+    && cd /opt/emsdk \
+    && ./emsdk install latest \
+    && ./emsdk activate latest
+ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:${PATH}"
+ENV EMSDK="/opt/emsdk"
+ENV EM_CONFIG="/opt/emsdk/.emscripten"
+ENV EMSDK_NODE="/usr/bin/node"
 
 # Create necessary directories
 RUN mkdir -p /games /hashes /config /scripts
