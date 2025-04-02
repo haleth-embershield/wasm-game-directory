@@ -55,13 +55,25 @@ ENV PATH="/root/.bun/bin:${PATH}"
 # Install Emscripten
 RUN git clone https://github.com/emscripten-core/emsdk.git /opt/emsdk \
     && cd /opt/emsdk \
-    && ./emsdk install latest \
-    && ./emsdk activate latest \
-    && . /opt/emsdk/emsdk_env.sh
-ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:/opt/emsdk/node/current/bin:/opt/emsdk/upstream/bin:${PATH}"
+    && ./emsdk install 3.1.45 \
+    && ./emsdk activate 3.1.45 \
+    && . /opt/emsdk/emsdk_env.sh \
+    # Verify installation paths exist
+    && ls -la /opt/emsdk/upstream/bin/ \
+    && ls -la /opt/emsdk/node/ \
+    # Create symlinks if needed
+    && mkdir -p /opt/emsdk/upstream/bin \
+    && ln -sf /usr/bin/clang /opt/emsdk/upstream/bin/clang \
+    && ln -sf /usr/bin/llvm-ar /opt/emsdk/upstream/bin/llvm-ar \
+    && mkdir -p /opt/emsdk/node/20.18.0_64bit/bin/ \
+    && ln -sf /usr/bin/node /opt/emsdk/node/20.18.0_64bit/bin/node
+
+# Set environment variables for Emscripten
+ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:/opt/emsdk/node/20.18.0_64bit/bin:/opt/emsdk/upstream/bin:${PATH}"
 ENV EMSDK="/opt/emsdk"
 ENV EM_CONFIG="/opt/emsdk/.emscripten"
-ENV EMSDK_NODE="/usr/bin/node"
+# Verify emcc can run
+RUN emcc --version
 
 # Create necessary directories
 RUN mkdir -p /games /hashes /config /scripts
