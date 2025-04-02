@@ -5,7 +5,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Set up environment variables
 ENV ZIG_VERSION=0.14.0
-ENV EMSDK_VERSION=3.1.48
 
 # Install essential tools and dependencies
 RUN apt-get update && apt-get install -y \
@@ -40,17 +39,22 @@ RUN wget https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERS
 # Add Zig to PATH
 ENV PATH="/usr/local/zig:${PATH}"
 
-# Install Emscripten
-WORKDIR /opt
-RUN git clone https://github.com/emscripten-core/emsdk.git \
-    && cd emsdk \
-    && ./emsdk install ${EMSDK_VERSION} \
-    && ./emsdk activate ${EMSDK_VERSION}
+# Install system dependencies that might be needed by Emscripten
+# These will be available to Emscripten when it's installed by build.zig
+RUN apt-get update && apt-get install -y \
+    llvm \
+    clang \
+    lld \
+    libedit-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Add Emscripten to PATH
-ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:/opt/emsdk/node/current/bin:/opt/emsdk/upstream/bin:${PATH}"
-ENV EMSDK="/opt/emsdk"
-ENV EM_CONFIG="/opt/emsdk/.emscripten"
+# Enable WebAssembly bulk memory operations
+RUN echo "EMSCRIPTEN_FEATURES=['-mbulk-memory']" >> /opt/emsdk/upstream/emscripten/em_config.py
+
+# Set environment variables to support bulk memory operations in wasm
+ENV CFLAGS="-mbulk-memory"
+ENV LDFLAGS="-mbulk-memory"
 
 # Install Bun
 RUN curl -fsSL https://bun.sh/install | bash
