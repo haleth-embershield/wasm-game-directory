@@ -32,7 +32,7 @@
     "build_command": "zig build deploy"
   },
   {
-    "name": "Pacman Emulator",
+    "name": "Pacman-Emulator",
     "repo_url": "https://github.com/haleth-embershield/hgames-pacman.zig",
     "description": "Pacman Emulator from floooh",
     "tags": ["pacman", "emulator", "fun"],
